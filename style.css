@@ -1,0 +1,230 @@
+html {
+    font-family: sans-serif;
+    background-color: rgb(255, 255, 255);
+    overscroll-behavior: none;
+}
+
+body {
+    padding: 0;
+    margin: 0;
+}
+
+a {
+    color: #006199;
+}
+
+pre {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+small {
+    color: var(--secondary-color);
+    font-size: medium;
+}
+
+table {
+    border-collapse: collapse;
+
+    td {
+        border: 1px solid var(--border-color);
+        padding: 5px;
+    }
+
+    th {
+        padding-left: 5px;
+        padding-right: 5px;
+    }
+}
+
+p {
+    text-align: justify;
+    margin-top: 0;
+}
+
+.box {
+    border: 1px solid var(--border-color);
+}
+
+.inbox {
+    border: 1px solid var(--primary-color)
+}
+
+.inputlike {
+    border-width: 1px !important;
+    border-color: var(--border-color) !important;
+    border-style: solid;
+    list-style-type: none;
+    cursor: text;
+    background-repeat: no-repeat;
+    box-sizing: border-box;
+    font-weight: normal;
+
+    &:hover {
+        filter: brightness(110%);
+    }
+
+    background-color: var(--secondary-color);
+    color: var(--text-color);
+}
+
+.inputstyle,
+.bouton,
+.dg-btn--ok,
+.dg-btn--cancel {
+    text-align: center !important;
+    position: relative;
+    display: inline-block;
+    text-decoration: none;
+    font-weight: bold;
+    border-width: 1px !important;
+    border-color: var(--border-color) !important;
+    border-style: solid;
+    list-style-type: none;
+    cursor: pointer;
+    box-shadow: 2px 2px 5px -2px var(--border-color);
+    background-repeat: no-repeat;
+    box-sizing: border-box;
+    font-size: 16px;
+    height: 33px;
+
+    &:hover {
+        filter: brightness(110%);
+    }
+}
+
+.bouton,
+.dg-btn--ok,
+.dg-btn--cancel {
+    font-size: 16px;
+    padding-right: 0px;
+    padding: 5px;
+    height: 33px;
+    width: 250px;
+    box-sizing: border-box;
+}
+
+.hidden {
+    display: none;
+}
+
+.autocomplete-input,
+.iconselect-input,
+select,
+input[type="date"],
+input[type="time"],
+input[type="number"],
+input[type="search"],
+input[type="text"],
+input[type="search"],
+input[type="password"],
+input[type="email"],
+input[role="combobox"],
+button[class="bouton"],
+a.bouton {
+    border: 1px solid var(--border-color);
+    padding: 6px;
+    box-shadow: 2px 2px 5px -2px var(--border-color);
+    margin: 0;
+    box-sizing: border-box;
+    height: 33px;
+    cursor: pointer;
+}
+
+.imgBt {
+    cursor: pointer;
+}
+
+.imgBt:hover {
+    filter: brightness(var(--hover-darken-pct, 85%));
+    background-color: var(--hover-darken-color, rgba(0, 0, 0, 0.15));
+    border-radius: 4px !important;
+}
+
+img.imgBt:hover {
+    background-color: var(--hover-darken-color, rgba(0, 0, 0, 0.15));
+    border-radius: 4px !important;
+}
+
+img.imgBt,
+.imgBt>img,
+.imgBt * img {
+    filter: var(--image-filter) !important;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.inline {
+    display: inline;
+}
+
+.grey,
+.gray {
+    color: gray;
+}
+
+.mono {
+    font-family: monospace;
+}
+
+pre {
+    font-family: sans-serif;
+}
+
+input {
+    color: var(--font-color);
+}
+
+.unselectable,
+img {
+    user-select: none;
+}
+
+.hover-darken:hover {
+    filter: brightness(var(--hover-darken-pct, 85%));
+    background-color: var(--hover-darken-color, rgba(0, 0, 0, 0.15));
+    border-radius: 4px;
+
+}
+
+.hover-brighten:hover {
+    filter: brightness(var(--hover-brighten-pct, 115%));
+    background-color: var(--hover-brighten-color, rgba(255, 255, 255, 0.15));
+}
+
+.hover-underline:hover {
+    text-decoration: underline;
+}
+
+.underline {
+    text-decoration: underline;
+}
+
+.clickable {
+    cursor: pointer;
+}
+
+.hastooltip {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+}
+
+.scrollable {
+    height: 100%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+html.dark .scrollable {
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0);
+}
+
+.scrollable::after {
+    content: '';
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    right: 0px;
+}
