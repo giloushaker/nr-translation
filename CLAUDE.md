@@ -7,5 +7,42 @@ View the translation status for each language
 Select their preferred language
 View the strings that need to be translated, with various ways to filter
 
+## Development Guidelines
+
 Prefer using vue options api
 Translation raw text display and translation input should support new lines
+
+## Architecture
+
+### Stores (Pinia)
+- `stores/loadingStore.ts` - Centralized loading state management with progress tracking
+- `stores/systemStore.ts` - Game system loading and management (GitHub repos, local systems)
+- `stores/promptStore.ts` - User prompt/dialog state persistence
+
+### Components
+- `components/LoadingOverlay.vue` - Reusable loading component with progress bar
+- Use the loading store and overlay component instead of duplicating loading UI
+
+### System Loading
+Game systems can be loaded from:
+- GitHub repositories (format: "owner/repo") 
+- Local storage (imported systems)
+
+The system store handles all loading logic and should be used instead of duplicating system loading code.
+
+## Code Quality Guidelines
+
+### Refactoring Priorities
+Always refactor when you see these patterns:
+1. **Duplicate code** - Extract to shared functions, stores, or components
+2. **Repeated loading logic** - Use the existing loading/system stores
+3. **Duplicate UI patterns** - Create reusable components
+4. **Hard-coded values** - Move to configuration or constants
+5. **Large functions** - Break into smaller, focused functions
+
+### Best Practices
+- Use Pinia stores for shared state management
+- Create reusable components for common UI patterns
+- Centralize loading states and progress tracking
+- Keep components focused and single-purpose
+- Extract business logic from components into stores or utilities

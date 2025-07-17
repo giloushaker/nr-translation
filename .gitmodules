@@ -6,3 +6,4 @@
 [submodule "assets/shared"]
 	path = assets/shared
 	url = https://github.com/giloushaker/nr-shared
+	branch = master

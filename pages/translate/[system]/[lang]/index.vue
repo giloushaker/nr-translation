@@ -1,21 +1,9 @@
 <template>
   <div class="container">
-    <!-- Loading overlay -->
-    <div v-if="loading" class="loading-overlay">
-      <div class="loading-content">
-        <h2>Loading Translation Data</h2>
-        <div class="loading-message">{{ loadingMessage }}</div>
-        <div class="progress-container">
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: loadingProgress + '%' }"></div>
-          </div>
-          <div class="progress-text">{{ loadingProgress }}%</div>
-        </div>
-      </div>
-    </div>
+    <LoadingOverlay title="Loading Translation Data" />
 
     <!-- Main content -->
-    <div v-else class="translation-interface">
+    <div class="translation-interface">
       <div class="header">
         <button @click="goBack" class="back-button">← Back to Languages</button>
         <h1>Translate to {{ languageName }}</h1>
@@ -53,6 +41,7 @@
                     <div class="col-original">Original Text</div>
                     <div class="col-translation">Translation</div>
                     <div class="col-status">Status</div>
+                    <div class="col-actions">Actions</div>
                   </div>
                   <div
                     v-for="(string, index) in catalogue.strings"
@@ -76,6 +65,9 @@
                       <span v-if="string.translated" class="status-badge translated">✓</span>
                       <span v-else class="status-badge untranslated">—</span>
                     </div>
+                    <div class="col-actions">
+                      <button @click="editString(string)" class="edit-button" title="Edit individually"> ✎ </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -92,14 +84,13 @@ import { ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getDataObject } from "~/assets/shared/battlescribe/bs_main";
 import { extractTranslations } from "~/assets/ts/bs_translate";
+import { useLoadingStore } from "~/stores/loadingStore";
+import { useSystemStore } from "~/stores/systemStore";
 
 const route = useRoute();
 const router = useRouter();
-
-// Loading state
-const loading = ref(true);
-const loadingProgress = ref(0);
-const loadingMessage = ref("Initializing...");
+const loadingStore = useLoadingStore();
+const systemStore = useSystemStore();
 
 // Translation data
 const languageCode = ref("");
@@ -128,23 +119,28 @@ const catalogues = ref<
   }>
 >([]);
 
-// Loading function with progress callback
-const loadTranslationData = async (progressCallback: (progress: number, message: string) => void): Promise<void> => {
+const loadTranslationData = async (updateProgress: (progress: number, message?: string) => void): Promise<void> => {
   try {
-    console.log(1);
-    const translations = extractTranslations(globalThis.system, progressCallback);
+    updateProgress(85, "Loading translation strings...");
+    const translations = extractTranslations(globalThis.system, (progress, message) => {
+      updateProgress(85 + Math.floor(progress * 0.15), message);
+    });
     globalThis.strings = translations;
 
     // Populate hierarchy data
-    const gameSystem = globalThis.system?.gameSystem;
-    systemName.value = gameSystem ? getDataObject(gameSystem).name : "Unknown System";
+    const gameSystem = systemStore.gameSystem;
+    systemName.value = systemStore.systemName || "Unknown System";
 
     const mockCatalogues = Object.entries(translations).map(([k, v]) => ({
       id: k,
       name: k,
       stringCount: v.size,
-      strings: Array.from(v).map((str) => ({
+      strings: Array.from(v).map((str, index) => ({
+        id: `${k}-${index}`,
+        key: str,
         original: str,
+        translation: "",
+        translated: false,
       })),
     }));
     console.log(mockCatalogues);
@@ -162,7 +158,8 @@ const loadTranslationData = async (progressCallback: (progress: number, message:
 };
 
 onMounted(async () => {
-  // Get language from route
+  // Get system and language from route
+  const systemId = route.params.system as string;
   languageCode.value = route.params.lang as string;
 
   // Map language codes to names (this would come from actual data)
@@ -180,33 +177,27 @@ onMounted(async () => {
 
   languageName.value = languageNames[languageCode.value] || languageCode.value;
 
-  // Check if system is loaded
-  if (!globalThis.system?.gameSystem) {
-    await router.push("/");
-    return;
-  }
-
   try {
-    // Load translation data with progress updates
-    await loadTranslationData((progress, message) => {
-      loadingProgress.value = progress;
-      loadingMessage.value = message;
-    });
+    await loadingStore.withLoading(async (updateProgress) => {
+      // Ensure system is loaded
+      await systemStore.ensureSystemLoaded(systemId, updateProgress);
 
-    // Small delay to show completion
-    await new Promise((resolve) => setTimeout(resolve, 300));
+      // Load translation data
+      await loadTranslationData(updateProgress);
 
-    // Hide loading screen
-    loading.value = false;
+      // Small delay to show completion
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }, "Initializing...");
   } catch (error) {
     console.error("Failed to initialize translation page:", error);
-    // Handle error - maybe redirect back
-    await router.push("/languages");
+    // Handle error - redirect to home if system doesn't exist
+    await router.push("/");
   }
 });
 
 const goBack = () => {
-  router.push("/languages");
+  const systemId = route.params.system as string;
+  router.push(`/languages/${encodeURIComponent(systemId)}`);
 };
 
 // Hierarchy toggle methods
@@ -232,6 +223,11 @@ const markAsModified = (string: any) => {
     0
   );
 };
+
+const editString = (string: any) => {
+  const systemId = route.params.system as string;
+  router.push(`/translate/${encodeURIComponent(systemId)}/${languageCode.value}/${encodeURIComponent(string.key)}`);
+};
 </script>
 
 <style scoped>
@@ -239,67 +235,6 @@ const markAsModified = (string: any) => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-}
-
-/* Loading overlay */
-.loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.loading-content {
-  text-align: center;
-  max-width: 400px;
-  width: 100%;
-  padding: 2rem;
-}
-
-.loading-content h2 {
-  margin-bottom: 1rem;
-  color: #333;
-}
-
-.loading-message {
-  color: #666;
-  margin-bottom: 2rem;
-  min-height: 1.5rem;
-}
-
-.progress-container {
-  position: relative;
-}
-
-.progress-bar {
-  height: 24px;
-  background: #f0f0f0;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4caf50, #45a049);
-  transition: width 0.3s ease;
-  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
-}
-
-.progress-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-weight: 600;
-  color: #333;
-  font-size: 0.875rem;
 }
 
 /* Main interface */
@@ -431,7 +366,7 @@ const markAsModified = (string: any) => {
 
 .table-header {
   display: grid;
-  grid-template-columns: 1fr 1fr 80px;
+  grid-template-columns: 1fr 1fr 80px 60px;
   background: #f8f9fa;
   border-bottom: 2px solid #dee2e6;
   font-weight: 600;
@@ -445,7 +380,7 @@ const markAsModified = (string: any) => {
 
 .table-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 80px;
+  grid-template-columns: 1fr 1fr 80px 60px;
   border-bottom: 1px solid #f0f0f0;
   min-height: 60px;
   align-items: stretch;
@@ -486,12 +421,40 @@ const markAsModified = (string: any) => {
   justify-content: center;
 }
 
+.col-actions {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .col-original {
   border-right: 1px solid #f0f0f0;
 }
 
 .col-translation {
   border-right: 1px solid #f0f0f0;
+}
+
+.col-status {
+  border-right: 1px solid #f0f0f0;
+}
+
+.edit-button {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  color: #007bff;
+}
+
+.edit-button:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+  color: #0056b3;
 }
 
 .original-text {

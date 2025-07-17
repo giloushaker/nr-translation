@@ -1,4 +1,4 @@
-import { addObj, forEachPairRecursive } from "../shared/battlescribe/bs_helpers";
+import { addObj, forEachPairRecursive, isObject } from "../shared/battlescribe/bs_helpers";
 import { getDataObject } from "../shared/battlescribe/bs_main";
 import { GameSystemFiles } from "../shared/battlescribe/local_game_system";
 
@@ -20,6 +20,7 @@ export function extractTranslations(system: GameSystemFiles, progressCallback: (
         "affects",
         "comment",
         "info",
+        "typeName",
 
         "authorName",
         "authorContact",
@@ -32,20 +33,33 @@ export function extractTranslations(system: GameSystemFiles, progressCallback: (
         "publisherUrl",
 
     ])
+    const blacklistedNodes = new Set([
+        "costs",
+        "publications"
+    ])
+    const REGEX_BSID = /^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/i
+    const REGEX_NO_LETTERS = /^[^a-zA-Z]+$/
+
+
     const result = {} as Record<string, Set<string>>
     const files = system.getAllCatalogueFiles()
     let cur = 0;
     for (const file of files) {
         const data = getDataObject(file)
         progressCallback(cur / files.length, data.name)
-        forEachPairRecursive(data, (value: string, key, obj) => {
+        forEachPairRecursive(data, (value: string, key, obj, path) => {
             if (typeof value !== "string") return;
             if (blacklistedKeys.has(key)) return;
             if (key.includes('Id')) return;
-            if (value.match(/^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/i)) return;
-            if (value.match(/^[^a-zA-Z]+$/)) return;
+            if (value.match(REGEX_BSID)) return;
+            if (value.match(REGEX_NO_LETTERS)) return;
+            if ("targetId" in obj) return;
+            if (key === "name" && path?.at(-1) === "characterisics") return;
             if (!(data.name in result)) result[data.name] = new Set()
             result[data.name].add(value)
+        }, (value, key) => {
+            if (blacklistedNodes.has(key)) return false;
+            return true;
         })
         cur++;
         progressCallback(cur / files.length, data.name)
