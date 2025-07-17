@@ -19,7 +19,7 @@ export default defineNuxtConfig({
   modules: [
     "nuxt-windicss",
     "@pinia/nuxt",
-    "@pinia-plugin-persistedstate/nuxt",
+    "pinia-plugin-persistedstate/nuxt",
   ],
   app: {
     head: {

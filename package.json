@@ -16,23 +16,23 @@
     "increment-version": "npm version patch --force"
   },
   "devDependencies": {
-    "@types/node": "^18",
-    "gh-pages": "^5.0.0",
-    "nuxt": "^3.5.2",
-    "nuxt-windicss": "^2.6.1",
-    "sass": "^1.62.1",
-    "vite": "^6.0.0",
-    "vite-plugin-commonjs": "^0.7.0"
+    "@types/node": "^24",
+    "gh-pages": "^6.3.0",
+    "nuxt": "^4.0.0",
+    "nuxt-windicss": "^3.0.1",
+    "sass": "^1.89.2",
+    "vite": "^7.0.5",
+    "vite-plugin-commonjs": "^0.10.4"
   },
   "dependencies": {
-    "@kyvg/vue3-notification": "^2.9.1",
-    "@pinia-plugin-persistedstate/nuxt": "^1.1.1",
-    "@pinia/nuxt": "^0.5.5",
-    "@rollup/plugin-typescript": "^11.1.6",
-    "dexie": "^3.2.3",
-    "fast-xml-parser": "^4.2.2",
+    "@kyvg/vue3-notification": "^3.4.1",
+    "@pinia/nuxt": "^0.11.1",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "dexie": "^4.0.11",
+    "fast-xml-parser": "^5.2.5",
     "jszip": "^3.10.1",
-    "pinia": "^2.0.36",
+    "pinia": "^3.0.3",
+    "pinia-plugin-persistedstate": "^4.4.1",
     "unzipit": "^1.4.3"
   },
   "prettier": {
