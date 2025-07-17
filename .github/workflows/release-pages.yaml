@@ -30,7 +30,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: 18.16.0
+          node-version: 22.17.1
 
       - name: Bump version with npm (uses default commit message)
         id: version_bump
