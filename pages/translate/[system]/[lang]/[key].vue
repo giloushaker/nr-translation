@@ -77,23 +77,13 @@ import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useLoadingStore } from "~/stores/loadingStore";
 import { useSystemStore } from "~/stores/systemStore";
-import { getDataObject } from "~/assets/shared/battlescribe/bs_main";
-import { extractTranslations } from "~/assets/ts/bs_translate";
-
-interface TranslationString {
-  id: string;
-  key: string;
-  original: string;
-  translation: string;
-  translated: boolean;
-  catalogue: string;
-  modified?: boolean;
-}
+import { useTranslationStore } from "~/stores/translationStore";
 
 const route = useRoute();
 const router = useRouter();
 const loadingStore = useLoadingStore();
 const systemStore = useSystemStore();
+const translationStore = useTranslationStore();
 
 // Route params
 const systemId = computed(() => route.params.system as string);
@@ -102,8 +92,10 @@ const currentKey = computed(() => route.params.key as string);
 
 // Translation data
 const languageName = ref("");
-const allTranslations = ref<TranslationString[]>([]);
 const currentIndex = ref(0);
+
+// Computed properties from store
+const allTranslations = computed(() => translationStore.translations);
 const totalKeys = computed(() => allTranslations.value.length);
 
 // Current translation
@@ -128,26 +120,8 @@ const loadTranslationData = async (): Promise<void> => {
     // Ensure system is loaded
     await systemStore.ensureSystemLoaded(systemId.value);
 
-    // Extract translations
-    const translations = extractTranslations(globalThis.system, () => {});
-    globalThis.strings = translations;
-
-    // Flatten all translations into a single array
-    const flatTranslations: TranslationString[] = [];
-    Object.entries(translations).forEach(([catalogueName, stringSet]) => {
-      Array.from(stringSet).forEach((str, index) => {
-        flatTranslations.push({
-          id: `${catalogueName}-${index}`,
-          key: str,
-          original: str,
-          translation: "",
-          translated: false,
-          catalogue: catalogueName,
-        });
-      });
-    });
-
-    allTranslations.value = flatTranslations;
+    // Load translations into store if not already loaded
+    await translationStore.loadTranslations(systemId.value, languageCode.value);
 
     // Find the current translation by key
     const decodedKey = decodeURIComponent(currentKey.value);
@@ -194,39 +168,32 @@ const navigateToIndex = (newIndex: number) => {
   }
 };
 
-const jumpToUntranslated = () => {
-  const nextUntranslated = allTranslations.value.findIndex((t, index) => index > currentIndex.value && !t.translated);
-  if (nextUntranslated !== -1) {
-    navigateToIndex(nextUntranslated);
-  }
-};
-
-const jumpToTranslated = () => {
-  const nextTranslated = allTranslations.value.findIndex((t, index) => index > currentIndex.value && t.translated);
-  if (nextTranslated !== -1) {
-    navigateToIndex(nextTranslated);
-  }
-};
-
 // Translation methods
 const markAsModified = () => {
   if (currentTranslation.value) {
-    currentTranslation.value.modified = true;
-    currentTranslation.value.translated = currentTranslation.value.translation.trim() !== "";
+    translationStore.updateTranslation(
+      currentTranslation.value.id,
+      currentTranslation.value.translation,
+      systemId.value,
+      languageCode.value
+    );
   }
 };
 
 const clearTranslation = () => {
   if (currentTranslation.value) {
-    currentTranslation.value.translation = "";
-    markAsModified();
+    translationStore.updateTranslation(currentTranslation.value.id, "", systemId.value, languageCode.value);
   }
 };
 
 const copyOriginal = () => {
   if (currentTranslation.value) {
-    currentTranslation.value.translation = currentTranslation.value.original;
-    markAsModified();
+    translationStore.updateTranslation(
+      currentTranslation.value.id,
+      currentTranslation.value.original,
+      systemId.value,
+      languageCode.value
+    );
   }
 };
 

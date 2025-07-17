@@ -2,6 +2,55 @@
   <div class="container">
     <LoadingOverlay title="Loading Translation Data" />
 
+    <!-- Export Dialog -->
+    <div v-if="showExportDialog" class="dialog-overlay" @click.self="showExportDialog = false">
+      <div class="dialog">
+        <div class="dialog-header">
+          <h2>Export Translations</h2>
+          <button @click="showExportDialog = false" class="dialog-close">×</button>
+        </div>
+        <div class="dialog-content">
+          <p>Select export format:</p>
+          <div class="format-options">
+            <label class="format-option">
+              <input type="radio" v-model="exportFormat" value="json" />
+              <span>JSON (Full)</span>
+              <small>Complete translation data with metadata</small>
+            </label>
+            <label class="format-option">
+              <input type="radio" v-model="exportFormat" value="json-kv" />
+              <span>JSON (Key-Value)</span>
+              <small>Simple key-value pairs format</small>
+            </label>
+            <label class="format-option">
+              <input type="radio" v-model="exportFormat" value="csv" />
+              <span>CSV</span>
+              <small>Spreadsheet-compatible format</small>
+            </label>
+            <label class="format-option">
+              <input type="radio" v-model="exportFormat" value="po" />
+              <span>PO (gettext)</span>
+              <small>GNU gettext format for translation tools</small>
+            </label>
+          </div>
+          <div class="export-options">
+            <label class="checkbox-option">
+              <input type="checkbox" v-model="exportOnlyTranslated" :disabled="exportOnlyUntranslated" />
+              <span>Export only translated strings</span>
+            </label>
+            <label class="checkbox-option">
+              <input type="checkbox" v-model="exportOnlyUntranslated" :disabled="exportOnlyTranslated" />
+              <span>Export only untranslated strings</span>
+            </label>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button @click="showExportDialog = false" class="dialog-button cancel">Cancel</button>
+          <button @click="exportTranslations" class="dialog-button primary">Export</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Main content -->
     <div class="translation-interface">
       <div class="header">
@@ -10,6 +59,7 @@
         <div class="header-stats">
           <span>{{ translatedCount }}/{{ totalStrings }} translated</span>
         </div>
+        <button @click="showExportDialog = true" class="export-button"> Export Translations </button>
       </div>
 
       <div class="translation-content scrollable">
@@ -62,8 +112,15 @@
                       ></textarea>
                     </div>
                     <div class="col-status">
-                      <span v-if="string.translated" class="status-badge translated">✓</span>
-                      <span v-else class="status-badge untranslated">—</span>
+                      <button
+                        @click="toggleTranslationStatus(string)"
+                        class="status-toggle"
+                        :class="{ translated: string.translated }"
+                        :title="string.translated ? 'Mark as untranslated' : 'Mark as translated'"
+                      >
+                        <span v-if="string.translated" class="status-icon check">✓</span>
+                        <span v-else class="status-icon cross">✗</span>
+                      </button>
                     </div>
                     <div class="col-actions">
                       <button @click="editString(string)" class="edit-button" title="Edit individually"> ✎ </button>
@@ -80,77 +137,45 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getDataObject } from "~/assets/shared/battlescribe/bs_main";
-import { extractTranslations } from "~/assets/ts/bs_translate";
 import { useLoadingStore } from "~/stores/loadingStore";
 import { useSystemStore } from "~/stores/systemStore";
+import { useTranslationStore, type ExportFormat } from "~/stores/translationStore";
 
 const route = useRoute();
 const router = useRouter();
 const loadingStore = useLoadingStore();
 const systemStore = useSystemStore();
+const translationStore = useTranslationStore();
 
 // Translation data
 const languageCode = ref("");
 const languageName = ref("");
-const totalStrings = ref(0);
-const translatedCount = ref(0);
 
 // Hierarchy data
-const systemName = ref("");
-const systemStringCount = ref(0);
 const systemExpanded = ref(true);
 const expandedCatalogues = ref(new Set<string>());
-const catalogues = ref<
-  Array<{
-    id: string;
-    name: string;
-    stringCount: number;
-    strings: Array<{
-      id: string;
-      key: string;
-      original: string;
-      translation: string;
-      translated: boolean;
-      modified?: boolean;
-    }>;
-  }>
->([]);
+
+// Export dialog
+const showExportDialog = ref(false);
+const exportFormat = ref<ExportFormat>("json");
+const exportOnlyTranslated = ref(false);
+const exportOnlyUntranslated = ref(false);
+
+// Computed properties from store
+const systemName = computed(() => systemStore.systemName || "Unknown System");
+const catalogues = computed(() => translationStore.catalogues);
+const totalStrings = computed(() => translationStore.totalStrings);
+const translatedCount = computed(() => translationStore.translatedCount);
+const systemStringCount = computed(() => translationStore.systemStringCount);
 
 const loadTranslationData = async (updateProgress: (progress: number, message?: string) => void): Promise<void> => {
   try {
     updateProgress(85, "Loading translation strings...");
-    const translations = extractTranslations(globalThis.system, (progress, message) => {
+    await translationStore.loadTranslations(route.params.system as string, languageCode.value, (progress, message) => {
       updateProgress(85 + Math.floor(progress * 0.15), message);
     });
-    globalThis.strings = translations;
-
-    // Populate hierarchy data
-    const gameSystem = systemStore.gameSystem;
-    systemName.value = systemStore.systemName || "Unknown System";
-
-    const mockCatalogues = Object.entries(translations).map(([k, v]) => ({
-      id: k,
-      name: k,
-      stringCount: v.size,
-      strings: Array.from(v).map((str, index) => ({
-        id: `${k}-${index}`,
-        key: str,
-        original: str,
-        translation: "",
-        translated: false,
-      })),
-    }));
-    console.log(mockCatalogues);
-    catalogues.value = mockCatalogues;
-    systemStringCount.value = mockCatalogues.reduce((total, cat) => total + cat.stringCount, 0);
-    totalStrings.value = systemStringCount.value;
-    translatedCount.value = mockCatalogues.reduce(
-      (total, cat) => total + cat.strings.filter((s) => s.translated).length,
-      0
-    );
   } catch (error) {
     console.error("Failed to load translation data:", error);
     throw error;
@@ -214,19 +239,34 @@ const toggleCatalogue = (catalogueId: string) => {
 };
 
 const markAsModified = (string: any) => {
-  string.modified = true;
-  string.translated = string.translation.trim() !== "";
+  translationStore.updateTranslation(string.id, string.translation, route.params.system as string, languageCode.value);
+};
 
-  // Recalculate translated count
-  translatedCount.value = catalogues.value.reduce(
-    (total, cat) => total + cat.strings.filter((s) => s.translated).length,
-    0
-  );
+const toggleTranslationStatus = (string: any) => {
+  // If currently translated, clear it. If not translated, copy original as translation
+  if (string.translated) {
+    translationStore.updateTranslation(string.id, "", route.params.system as string, languageCode.value);
+  } else {
+    translationStore.updateTranslation(string.id, string.original, route.params.system as string, languageCode.value);
+  }
 };
 
 const editString = (string: any) => {
   const systemId = route.params.system as string;
   router.push(`/translate/${encodeURIComponent(systemId)}/${languageCode.value}/${encodeURIComponent(string.key)}`);
+};
+
+const exportTranslations = () => {
+  translationStore.downloadExport(
+    exportFormat.value,
+    languageCode.value,
+    languageName.value,
+    systemStore.systemName || "system",
+    exportOnlyTranslated.value,
+    exportOnlyUntranslated.value
+  );
+  
+  showExportDialog.value = false;
 };
 </script>
 
@@ -276,6 +316,22 @@ const editString = (string: any) => {
 .header-stats {
   color: #666;
   font-size: 0.875rem;
+  flex: 1;
+}
+
+.export-button {
+  padding: 0.5rem 1rem;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.export-button:hover {
+  background: #0056b3;
 }
 
 .translation-content {
@@ -492,24 +548,200 @@ const editString = (string: any) => {
   color: #999;
 }
 
-.status-badge {
+.status-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  font-size: 0.75rem;
+  transition: transform 0.2s;
+}
+
+.status-toggle:hover {
+  transform: scale(1.1);
+}
+
+.status-icon {
+  font-size: 1.25rem;
   font-weight: bold;
 }
 
-.status-badge.translated {
-  background: #28a745;
-  color: white;
+.status-icon.check {
+  color: #28a745;
 }
 
-.status-badge.untranslated {
-  background: #6c757d;
+.status-icon.cross {
+  color: #dc3545;
+}
+
+/* Dialog styles */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 500px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.dialog-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.dialog-close:hover {
+  color: #333;
+}
+
+.dialog-content {
+  padding: 1.5rem;
+}
+
+.dialog-content p {
+  margin: 0 0 1rem 0;
+  color: #495057;
+}
+
+.format-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.format-option {
+  display: flex;
+  align-items: flex-start;
+  padding: 1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.format-option:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+}
+
+.format-option input[type="radio"] {
+  margin-right: 0.75rem;
+  margin-top: 0.125rem;
+}
+
+.format-option span {
+  font-weight: 500;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.format-option small {
+  display: block;
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+.export-options {
+  border-top: 1px solid #dee2e6;
+  padding-top: 1rem;
+}
+
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.checkbox-option:last-child {
+  margin-bottom: 0;
+}
+
+.checkbox-option input[type="checkbox"] {
+  margin-right: 0.5rem;
+}
+
+.checkbox-option input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.checkbox-option input[type="checkbox"]:disabled ~ span {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.dialog-button {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  background: white;
+}
+
+.dialog-button:hover {
+  background: #f8f9fa;
+}
+
+.dialog-button.primary {
+  background: #007bff;
   color: white;
+  border-color: #007bff;
+}
+
+.dialog-button.primary:hover {
+  background: #0056b3;
+  border-color: #0056b3;
+}
+small {
+  margin-left: auto;
+  text-align: right;
 }
 </style>

@@ -54,9 +54,9 @@ export function extractTranslations(system: GameSystemFiles, progressCallback: (
             if (value.match(REGEX_BSID)) return;
             if (value.match(REGEX_NO_LETTERS)) return;
             if ("targetId" in obj) return;
-            if (key === "name" && path?.at(-1) === "characterisics") return;
+            if (key === "name" && path?.at(-1) === "characteristics") return;
             if (!(data.name in result)) result[data.name] = new Set()
-            result[data.name].add(value)
+            result[data.name]!.add(value)
         }, (value, key) => {
             if (blacklistedNodes.has(key)) return false;
             return true;

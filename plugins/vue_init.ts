@@ -10,7 +10,6 @@ export default defineNuxtPlugin((nuxtApp) => {
   (nuxtApp.$pinia as Pinia).use(({ store }) => {
     store.$router = nuxtApp.$router as Router;
   });
-  const oldLog = globalThis.console.log
-  globalThis.console.log = (...args: any[]) => oldLog(...args.map((arg) => toRaw(arg)))
   globalThis.notify = notify;
+  console.log('globals:', 'system', 'strings', 'translations')
 });
