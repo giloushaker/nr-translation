@@ -14,7 +14,7 @@ export class GithubSubmission {
    */
   static createIssueUrl(systemId: string, languageCode: string, translations: any[]): string {
     const title = `Translation update: ${systemId} - ${languageCode}`;
-    
+
     // Format translations for issue body
     const translationData = {
       system: systemId,
@@ -86,7 +86,7 @@ Your translations will be reviewed and merged by a maintainer.`;
     const path = `${systemId}/${languageCode}/translations.json`;
     const message = `Update ${languageCode} translations for ${systemId}`;
     const description = `Updated translation file with new/modified translations.\n\nThis PR was created using the NR Translation Tool.`;
-    
+
     // GitHub will automatically fork the repo and create a PR if the user doesn't have write access
     const params = new URLSearchParams({
       filename: path,
@@ -95,17 +95,7 @@ Your translations will be reviewed and merged by a maintainer.`;
       description: description,
       target_branch: 'main'
     });
-    
-    return `https://github.com/${this.REPO_OWNER}/${this.REPO_NAME}/new/main?${params}`;
-  }
 
-  /**
-   * Create a URL to edit an existing file (will create PR if no write access)
-   * Note: GitHub's edit URL doesn't support pre-filling content, so we use the same new file approach
-   */
-  static createEditFileUrl(systemId: string, languageCode: string, fileContent: string): string {
-    // GitHub doesn't allow pre-filling content when editing existing files via URL
-    // So we'll use the same approach as creating new files - this will show a diff
-    return this.createDirectEditUrl(systemId, languageCode, fileContent);
+    return `https://github.com/${this.REPO_OWNER}/${this.REPO_NAME}/new/main?${params}`;
   }
 }

@@ -3,14 +3,14 @@ import type { TranslationSource } from "./index";
 
 // NewRecruit translation source - doesn't involve any system
 export class NewRecruitTranslationSource implements TranslationSource {
-  constructor() {}
+  constructor() { }
 
   getId(): string {
     return "newrecruit";
   }
 
   getName(): string {
-    return "NewRecruit";
+    return "NewRecruit (Placeholder)";
   }
 
   async getTranslations(languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<{
@@ -19,7 +19,7 @@ export class NewRecruitTranslationSource implements TranslationSource {
     translations: TranslationString[];
   }> {
     progressCallback?.(10, "Loading NewRecruit interface strings...");
-    
+
     // Example: NewRecruit has its own translatable strings
     const newRecruitStrings = [
       "Welcome to NewRecruit",
