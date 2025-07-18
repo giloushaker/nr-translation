@@ -7,7 +7,7 @@
       <h2>Quick Select</h2>
       <div class="repo-grid">
         <div v-for="repo in quickSelectRepos" :key="repo.url" class="repo-card" @click="loadQuickRepo(repo)">
-          <div class="repo-icon">{{ repo.isTranslationSource ? '🌐' : '📁' }}</div>
+          <div class="repo-icon">{{ repo.isTranslationSource ? "🌐" : "📁" }}</div>
           <div class="repo-info">
             <h3>{{ repo.name }}</h3>
             <p>{{ repo.description }}</p>
@@ -43,7 +43,7 @@
       </div>
     </div>
 
-    <div class="input-section">
+    <div class="input-section input-folder">
       <h2>Load from Local Folder</h2>
       <div class="input-group">
         <input
@@ -394,7 +394,10 @@ onMounted(() => {
   border: 1px solid #ddd;
   border-radius: 8px;
 }
-
+.input-folder {
+  display: flex;
+  justify-content: space-between;
+}
 .input-group {
   display: flex;
   gap: 1rem;

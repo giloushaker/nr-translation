@@ -13,7 +13,7 @@ import { useTranslationStore } from "~/stores/translationStore";
 
 // Ensure this parent route is also kept alive
 definePageMeta({
-  keepalive: true
+  keepalive: true,
 });
 
 const route = useRoute();
@@ -45,19 +45,16 @@ const initializeTranslationPage = async () => {
   const systemId = route.params.system as string;
   const languageCode = route.params.lang as string;
 
-  console.log("Translate route init:", { systemId, languageCode, path: route.path });
-
   // Only redirect if we're actually on a translate route but missing parameters
-  const isTranslateRoute = route.path.includes('/translate/');
+  const isTranslateRoute = route.path.includes("/translate/");
   if (isTranslateRoute && (!systemId || !languageCode)) {
     console.log("Redirecting to home due to missing params on translate route");
     await router.push("/");
     return;
   }
-  
+
   // If we're not on a translate route, don't try to load translation data
   if (!isTranslateRoute) {
-    console.log("Not on translate route, skipping translation loading");
     isTranslationDataReady.value = true;
     return;
   }
@@ -92,7 +89,6 @@ const initializeTranslationPage = async () => {
 };
 
 onMounted(() => {
-  console.log("Parent translate route mounted");
   initializeTranslationPage();
 });
 
@@ -103,12 +99,12 @@ watch(
   async ([newSystem, newLang], [oldSystem, oldLang] = []) => {
     // Only react if system or language actually changed AND we're on a translate route
     const paramsChanged = newSystem !== oldSystem || newLang !== oldLang;
-    const isOnTranslateRoute = route.path.includes('/translate/');
-    
+    const isOnTranslateRoute = route.path.includes("/translate/");
+
     if (paramsChanged && isOnTranslateRoute && oldSystem !== undefined) {
-      console.log("System/Language changed:", { 
-        from: [oldSystem, oldLang], 
-        to: [newSystem, newLang] 
+      console.log("System/Language changed:", {
+        from: [oldSystem, oldLang],
+        to: [newSystem, newLang],
       });
       isTranslationDataReady.value = false;
       await initializeTranslationPage();

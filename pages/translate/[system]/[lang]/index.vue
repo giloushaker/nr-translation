@@ -299,6 +299,11 @@ const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onl
 </script>
 
 <style scoped>
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 
 /* Main interface */
 .translation-interface {

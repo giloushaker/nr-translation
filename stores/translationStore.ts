@@ -239,7 +239,7 @@ export const useTranslationStore = defineStore("translation", {
 
     async loadTranslationsFromSource(translationSource: TranslationSource, languageCode?: string, progressCallback?: (progress: number, message?: string) => void) {
       const sourceId = translationSource.getId();
-      
+
       // Only load if not already loaded for this source
       if (this.isLoaded && this.currentSystemId === sourceId) {
         return;
@@ -276,27 +276,18 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     async ensureTranslationsLoaded(systemId: string, languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<void> {
-      console.log("ensureTranslationsLoaded called:", { 
-        systemId, 
-        languageCode, 
-        isLoaded: this.isLoaded, 
-        currentSystemId: this.currentSystemId 
-      });
-      
       // If translations are already loaded for this exact system, return
       if (this.isLoaded && this.currentSystemId === systemId) {
-        console.log("Translations already loaded for this system, skipping");
         return;
       }
 
-      console.log("Loading translations for new system, clearing cache");
       // Always clear cache when loading a different system
       this.clearCache();
 
       // Create the appropriate translation source for this systemId
       const { createTranslationSourceForSystem } = await import("./translationSources");
       const source = createTranslationSourceForSystem(systemId);
-      
+
       // Load translations using the source
       await this.loadTranslationsFromSource(source, languageCode, progressCallback);
       this.currentSystemId = systemId;
@@ -339,7 +330,7 @@ export const useTranslationStore = defineStore("translation", {
       this.translationSource = null;
       this.totalStrings = 0;
       this.translatedCount = 0;
-      
+
       // Clear global variables as well
       globalThis.strings = {};
       globalThis.translations = [];

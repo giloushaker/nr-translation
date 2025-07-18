@@ -234,6 +234,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 
 .translation-interface {
   display: flex;

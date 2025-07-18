@@ -2,39 +2,14 @@
   <div id="popups" />
   <div id="dialogs" />
   <div id="app">
-    <Notifications :style="{ 'margin-top': `${titleSize + 5}px` }" position="top center" />
+    <Notifications position="top center" />
     <ClientOnly>
-      <div class="title" ref="title" @resize="update">
-        <TitleBar />
-      </div>
-      <div class="content" :style="{ height: `calc(100vh - ${titleSize}px)` }">
+      <div class="content">
         <NuxtPage :keepalive="true" />
       </div>
     </ClientOnly>
   </div>
 </template>
-
-<script lang="ts">
-export default defineComponent({
-  data() {
-    return {
-      val: "",
-      titleSize: 50,
-    };
-  },
-  methods: {
-    update() {
-      this.titleSize = (this.$refs.title as HTMLDivElement).clientHeight;
-    },
-  },
-  mounted() {
-    addEventListener("resize", this.update);
-  },
-  unmounted() {
-    removeEventListener("resize", this.update);
-  },
-});
-</script>
 
 <style lang="scss">
 @use "@/shared_components/css/vars.scss" as *;
@@ -44,6 +19,12 @@ export default defineComponent({
   height: 100%;
   width: 100%;
   position: fixed;
+}
+
+.content {
+  height: 100vh;
+  width: 100%;
+  overflow-y: auto;
 }
 
 html {
