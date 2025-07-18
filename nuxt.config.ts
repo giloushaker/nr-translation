@@ -22,6 +22,7 @@ export default defineNuxtConfig({
     "pinia-plugin-persistedstate/nuxt",
   ],
   app: {
+    baseURL: ghpages ? `/nr-translation/` : undefined,
     head: {
       title: "New Recruit - Translation",
       base: {
@@ -30,6 +31,7 @@ export default defineNuxtConfig({
 
     },
   },
+
   typescript: {
     strict: true,
   },
