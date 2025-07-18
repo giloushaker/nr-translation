@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { TranslationBackend, NoOpBackend, FileBackend } from "./translationBackends";
+import { TranslationBackend, NoOpBackend, FileBackend, GithubBackend } from "./translationBackends";
 import { type TranslationSource } from "./translationSources";
 
 export interface TranslationString {
@@ -30,7 +30,7 @@ export const useTranslationStore = defineStore("translation", {
     currentSystemId: null as string | null,
     totalStrings: 0,
     translatedCount: 0,
-    backend: new NoOpBackend() as TranslationBackend,
+    backend: new GithubBackend() as TranslationBackend,
     translationSource: null as TranslationSource | null,
     isSyncing: false,
     isSubmitting: false,
@@ -150,30 +150,65 @@ export const useTranslationStore = defineStore("translation", {
       });
     },
 
+    async dbDeleteByCompositeKey(compositeKey: string): Promise<void> {
+      const db = await this.dbOpen();
+      const transaction = db.transaction(['translations'], 'readwrite');
+      const store = transaction.objectStore('translations');
+
+      return new Promise((resolve, reject) => {
+        const request = store.delete(compositeKey);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    },
+
     async saveTranslationsToLocal(systemId: string, languageCode: string, translations?: TranslationString[]) {
-      // Only save translated strings to reduce storage
-      const translatedStrings = translations ?? this.translations.filter(t => t.translated);
       const systemLanguageKey = `${systemId}-${languageCode}`;
 
       try {
-        // Clear existing translations for this system-language combination
-        await this.dbDeleteByIndex('systemLanguage', systemLanguageKey);
+        if (translations && translations.length > 0) {
+          // Save specific translations (for individual updates)
+          for (const translation of translations) {
+            // Only save if translated
+            if (translation.translated) {
+              const record = {
+                compositeKey: `${systemId}-${languageCode}-${translation.key}`,
+                systemId,
+                languageCode,
+                systemLanguage: systemLanguageKey,
+                key: translation.key,
+                translation: translation.translation,
+                catalogue: translation.catalogue,
+                modified: translation.modified,
+                lastSaved: Date.now()
+              };
 
-        // Save each translation as individual record
-        for (const translation of translatedStrings) {
-          const record = {
-            compositeKey: `${systemId}-${languageCode}-${translation.key}`,
-            systemId,
-            languageCode,
-            systemLanguage: systemLanguageKey,
-            key: translation.key,
-            translation: translation.translation,
-            catalogue: translation.catalogue,
-            modified: translation.modified,
-            lastSaved: Date.now()
-          };
+              await this.dbPutRecord(record);
+            } else {
+              // If not translated, remove the record if it exists
+              await this.dbDeleteByCompositeKey(`${systemId}-${languageCode}-${translation.key}`);
+            }
+          }
+        } else {
+          // Full save - clear and save all translated strings
+          await this.dbDeleteByIndex('systemLanguage', systemLanguageKey);
+          
+          const translatedStrings = this.translations.filter(t => t.translated);
+          for (const translation of translatedStrings) {
+            const record = {
+              compositeKey: `${systemId}-${languageCode}-${translation.key}`,
+              systemId,
+              languageCode,
+              systemLanguage: systemLanguageKey,
+              key: translation.key,
+              translation: translation.translation,
+              catalogue: translation.catalogue,
+              modified: translation.modified,
+              lastSaved: Date.now()
+            };
 
-          await this.dbPutRecord(record);
+            await this.dbPutRecord(record);
+          }
         }
       } catch (error) {
         console.warn('Failed to save translations to IndexedDB:', error);
@@ -348,7 +383,7 @@ export const useTranslationStore = defineStore("translation", {
     // Sync translations from file
     async syncFromFile(file: File, systemId: string, languageCode: string, strategy: 'server-wins' | 'client-wins' | 'ask-user' = 'ask-user'): Promise<{ conflicts: Array<{ key: string, original: string, local: string, server: string }> }> {
       const fileBackend = new FileBackend(file);
-      const backendTranslations = await fileBackend.sync(systemId, languageCode);
+      const backendTranslations = await fileBackend.fetchTranslations(systemId, languageCode);
 
       return await this.syncTranslations(backendTranslations, systemId, languageCode, strategy);
     },
@@ -359,7 +394,7 @@ export const useTranslationStore = defineStore("translation", {
         throw new Error('No backend configured');
       }
 
-      const backendTranslations = await this.backend.sync(systemId, languageCode);
+      const backendTranslations = await this.backend.fetchTranslations(systemId, languageCode);
 
       return await this.syncTranslations(backendTranslations, systemId, languageCode, strategy);
     },
@@ -502,7 +537,7 @@ export const useTranslationStore = defineStore("translation", {
         }
 
         if (translationsToSubmit.length > 0) {
-          await this.backend.submit(systemId, languageCode, translationsToSubmit);
+          await this.backend.uploadTranslations(systemId, languageCode, translationsToSubmit);
 
           // Mark submitted translations as unmodified
           translationsToSubmit.forEach(t => {

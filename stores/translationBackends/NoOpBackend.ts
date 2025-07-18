@@ -3,19 +3,16 @@ import type { TranslationBackend } from "./index";
 
 // Default no-op backend implementation
 export class NoOpBackend implements TranslationBackend {
-  getSystems(): Promise<Array<{ name: string; description: string; id: string; }>> {
-    throw new Error("Method not implemented.");
+  async getStats(systemId: string): Promise<any> {
+    // Return null to indicate no stats available
+    return null;
   }
-  
-  getStats(systemId: string): Promise<any> {
-    throw new Error("Method not implemented.");
-  }
-  
-  async sync(systemId: string, languageCode: string): Promise<TranslationString[]> {
+
+  async fetchTranslations(systemId: string, languageCode: string): Promise<TranslationString[]> {
     return [];
   }
 
-  async submit(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
+  async uploadTranslations(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
     // No-op
   }
 

@@ -37,9 +37,9 @@ export function extractStrings(system: GameSystemFiles, progressCallback: (progr
         "costs",
         "publications"
     ])
-    const REGEX_BSID = /^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/i
+    const REGEX_BSID = /^[0-9a-f]{3,4}-[0-9a-f]{3,4}-[0-9a-f]{3,4}-[0-9a-f]{3,4}$/i
     const REGEX_NO_LETTERS = /^[^a-zA-Z]+$/
-
+    const REGEX_DICE_NOTATION = /^(\d*)D(3|6)(\+\d+)?$/
 
     const result = {} as Record<string, Set<string>>
     const files = system.getAllCatalogueFiles()
@@ -53,6 +53,7 @@ export function extractStrings(system: GameSystemFiles, progressCallback: (progr
             if (key.includes('Id')) return;
             if (value.match(REGEX_BSID)) return;
             if (value.match(REGEX_NO_LETTERS)) return;
+            if (value.match(REGEX_DICE_NOTATION)) return;
             if ("targetId" in obj) return;
             if (key === "name" && path?.at(-1) === "characteristics") return;
             if (!(data.name in result)) result[data.name] = new Set()

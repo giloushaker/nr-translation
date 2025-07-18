@@ -63,10 +63,11 @@
 import { ref, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useLoadingStore } from "~/stores/loadingStore";
+import { useTranslationStore } from "~/stores/translationStore";
 
 // Explicitly disable layout for this page to prevent conflicts with translate layout
 definePageMeta({
-  layout: false
+  layout: false,
 });
 
 interface Language {
@@ -82,117 +83,111 @@ interface Language {
 const route = useRoute();
 const router = useRouter();
 const loadingStore = useLoadingStore();
+const translationStore = useTranslationStore();
 const languages = ref<Language[]>([]);
 const systemName = ref("");
 
-// Sample languages data - this should be populated from actual translation data
-const sampleLanguages: Language[] = [
-  {
-    code: "en",
-    name: "English",
-    translatedPercent: 100,
-    reviewedPercent: 100,
-    totalStrings: 1500,
-    translatedStrings: 1500,
-    untranslatedStrings: 0,
-  },
-  {
-    code: "es",
-    name: "Spanish",
-    translatedPercent: 85,
-    reviewedPercent: 72,
-    totalStrings: 1500,
-    translatedStrings: 1275,
-    untranslatedStrings: 225,
-  },
-  {
-    code: "fr",
-    name: "French",
-    translatedPercent: 92,
-    reviewedPercent: 85,
-    totalStrings: 1500,
-    translatedStrings: 1380,
-    untranslatedStrings: 120,
-  },
-  {
-    code: "de",
-    name: "German",
-    translatedPercent: 78,
-    reviewedPercent: 65,
-    totalStrings: 1500,
-    translatedStrings: 1170,
-    untranslatedStrings: 330,
-  },
-  {
-    code: "it",
-    name: "Italian",
-    translatedPercent: 65,
-    reviewedPercent: 45,
-    totalStrings: 1500,
-    translatedStrings: 975,
-    untranslatedStrings: 525,
-  },
-  {
-    code: "pt",
-    name: "Portuguese",
-    translatedPercent: 70,
-    reviewedPercent: 60,
-    totalStrings: 1500,
-    translatedStrings: 1050,
-    untranslatedStrings: 450,
-  },
-  {
-    code: "ru",
-    name: "Russian",
-    translatedPercent: 55,
-    reviewedPercent: 40,
-    totalStrings: 1500,
-    translatedStrings: 825,
-    untranslatedStrings: 675,
-  },
-  {
-    code: "ja",
-    name: "Japanese",
-    translatedPercent: 45,
-    reviewedPercent: 30,
-    totalStrings: 1500,
-    translatedStrings: 675,
-    untranslatedStrings: 825,
-  },
-  {
-    code: "zh",
-    name: "Chinese",
-    translatedPercent: 40,
-    reviewedPercent: 25,
-    totalStrings: 1500,
-    translatedStrings: 600,
-    untranslatedStrings: 900,
-  },
+// Default language list
+const defaultLanguageCodes = [
+  { code: "en", name: "English" },
+  { code: "es", name: "Spanish" },
+  { code: "fr", name: "French" },
+  { code: "de", name: "German" },
+  { code: "it", name: "Italian" },
+  { code: "pt", name: "Portuguese" },
+  { code: "ru", name: "Russian" },
+  { code: "ja", name: "Japanese" },
+  { code: "zh", name: "Chinese" },
 ];
+
+// Helper function to generate default language data (all zeros)
+const generateDefaultLanguages = (): Language[] => {
+  return defaultLanguageCodes.map((lang) => ({
+    code: lang.code,
+    name: lang.name,
+    translatedPercent: 0,
+    reviewedPercent: 0,
+    totalStrings: 0,
+    translatedStrings: 0,
+    untranslatedStrings: 0,
+  }));
+};
+
+// Helper function to generate language data from backend stats or defaults
+const generateLanguageData = async (systemId: string, backendStats: any): Promise<Language[]> => {
+  return defaultLanguageCodes.map((lang) => {
+    // Check if backend has stats for this language
+    const langStats = backendStats?.languages?.[lang.code];
+
+    if (langStats) {
+      const totalStrings = langStats.total || 0;
+      const translatedStrings = langStats.translated || 0;
+      const reviewedStrings = langStats.reviewed || 0;
+      const untranslatedStrings = totalStrings - translatedStrings;
+
+      return {
+        code: lang.code,
+        name: lang.name,
+        translatedPercent: totalStrings > 0 ? Math.round((translatedStrings / totalStrings) * 100) : 0,
+        reviewedPercent: totalStrings > 0 ? Math.round((reviewedStrings / totalStrings) * 100) : 0,
+        totalStrings,
+        translatedStrings,
+        untranslatedStrings: Math.max(0, untranslatedStrings),
+      };
+    } else {
+      // No backend stats, return zeros
+      return {
+        code: lang.code,
+        name: lang.name,
+        translatedPercent: 0,
+        reviewedPercent: 0,
+        totalStrings: 0,
+        translatedStrings: 0,
+        untranslatedStrings: 0,
+      };
+    }
+  });
+};
 
 const loadSystem = async (systemId: string) => {
   await loadingStore.withLoading(async (updateProgress) => {
     try {
-      updateProgress(30, "Loading system information...");
+      updateProgress(20, "Loading system information...");
       console.log("Loading system:", systemId);
-      
+
       // Get just the system name without loading full translations
       const translationSources = await import("~/stores/translationSources");
       systemName.value = await translationSources.getSystemName(systemId);
       console.log("System name loaded:", systemName.value);
 
+      updateProgress(50, "Loading translation statistics...");
+
+      // Try to get stats from backend if available
+      let backendStats = null;
+      if (translationStore.backend.isAvailable()) {
+        try {
+          console.log("Loading stats from backend for system:", systemId);
+          backendStats = await translationStore.backend.getStats(systemId);
+          console.log("Backend stats loaded:", backendStats);
+        } catch (error) {
+          console.warn("Failed to load stats from backend:", error);
+        }
+      }
+
+      updateProgress(80, "Preparing language data...");
+
+      // Generate language list with backend stats or defaults
+      languages.value = await generateLanguageData(systemId, backendStats);
+
       updateProgress(100, "Complete!");
 
       // Small delay to show completion
       await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Load languages
-      languages.value = sampleLanguages;
     } catch (error) {
       console.error("Failed to load system:", error, "for systemId:", systemId);
       // Don't redirect to home, just show error in console and use fallback name
       systemName.value = systemId; // Fallback to systemId as name
-      languages.value = sampleLanguages;
+      languages.value = generateDefaultLanguages();
     }
   }, "Initializing...");
 };

@@ -52,6 +52,23 @@
         </div>
       </div>
 
+      <!-- Filter Controls -->
+      <div class="filter-controls">
+        <div class="filter-group">
+          <label for="filter-select">Show:</label>
+          <select id="filter-select" v-model="selectedFilter" class="filter-select">
+            <option value="all">All Strings</option>
+            <option value="translated">Translated Only</option>
+            <option value="untranslated">Untranslated Only</option>
+            <option value="modified">Modified Only</option>
+            <option value="untranslated-modified">Untranslated + Modified</option>
+          </select>
+        </div>
+        <div class="filter-stats">
+          <span class="filter-count">{{ filteredCount }} of {{ totalStrings }} strings shown</span>
+        </div>
+      </div>
+
       <div class="translation-content scrollable">
         <div class="hierarchy-container">
           <!-- System level -->
@@ -64,7 +81,7 @@
 
             <!-- Catalogues -->
             <div v-if="systemExpanded" class="hierarchy-children">
-              <div v-for="catalogue in catalogues" :key="catalogue.id" class="hierarchy-item catalogue-level">
+              <div v-for="catalogue in filteredCatalogues" :key="catalogue.id" class="hierarchy-item catalogue-level">
                 <button
                   class="hierarchy-toggle"
                   @click="toggleCatalogue(catalogue.id)"
@@ -72,11 +89,11 @@
                 >
                   <span class="toggle-icon">{{ expandedCatalogues.has(catalogue.id) ? "▼" : "▶" }}</span>
                   <span class="catalogue-name">{{ catalogue.name }}</span>
-                  <span class="item-count">({{ catalogue.stringCount }} strings)</span>
+                  <span class="item-count">({{ catalogue.filteredStringCount }} of {{ catalogue.stringCount }} strings)</span>
                 </button>
 
                 <!-- Strings Table -->
-                <div v-if="expandedCatalogues.has(catalogue.id)" class="strings-table">
+                <div v-if="expandedCatalogues.has(catalogue.id) && catalogue.filteredStrings.length > 0" class="strings-table">
                   <div class="table-header">
                     <div class="col-original">Original Text</div>
                     <div class="col-translation">Translation</div>
@@ -84,10 +101,10 @@
                     <div class="col-actions">Actions</div>
                   </div>
                   <div
-                    v-for="(string, index) in catalogue.strings"
+                    v-for="(string, index) in catalogue.filteredStrings"
                     :key="string.id"
                     class="table-row"
-                    :class="{ translated: string.translated, 'row-even': index % 2 === 0 }"
+                    :class="{ translated: string.translated, modified: string.modified, 'row-even': index % 2 === 0 }"
                   >
                     <div class="col-original">
                       <div class="original-text">{{ string.original }}</div>
@@ -127,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTranslationStore, type ExportFormat } from "~/stores/translationStore";
 import ExportDialog from "~/components/ExportDialog.vue";
@@ -143,6 +160,11 @@ const translationStore = useTranslationStore();
 const systemExpanded = ref(true);
 const expandedCatalogues = ref(new Set<string>());
 
+// Filter state
+const selectedFilter = ref<string>('all');
+const cachedFilteredCatalogues = ref<any[]>([]);
+const cachedFilteredCount = ref<number>(0);
+
 // Dialog states
 const showExportDialog = ref(false);
 const showSubmitDialog = ref(false);
@@ -156,6 +178,41 @@ const catalogues = computed(() => translationStore.catalogues);
 const totalStrings = computed(() => translationStore.totalStrings);
 const translatedCount = computed(() => translationStore.translatedCount);
 const systemStringCount = computed(() => translationStore.systemStringCount);
+
+// Filter function
+const filterString = (string: any, filterType: string) => {
+  switch (filterType) {
+    case 'translated':
+      return string.translated;
+    case 'untranslated':
+      return !string.translated;
+    case 'modified':
+      return string.modified;
+    case 'untranslated-modified':
+      return !string.translated || string.modified;
+    default:
+      return true;
+  }
+};
+
+// Apply filter function
+const applyFilter = () => {
+  const filtered = catalogues.value.map(catalogue => {
+    const filteredStrings = catalogue.strings.filter(string => filterString(string, selectedFilter.value));
+    return {
+      ...catalogue,
+      filteredStrings,
+      filteredStringCount: filteredStrings.length
+    };
+  }).filter(catalogue => catalogue.filteredStringCount > 0);
+  
+  cachedFilteredCatalogues.value = filtered;
+  cachedFilteredCount.value = filtered.reduce((total, catalogue) => total + catalogue.filteredStringCount, 0);
+};
+
+// Computed properties that use cached values
+const filteredCatalogues = computed(() => cachedFilteredCatalogues.value);
+const filteredCount = computed(() => cachedFilteredCount.value);
 
 // Backend computed properties
 const canSubmit = computed(() => translationStore.canSubmit);
@@ -296,6 +353,21 @@ const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onl
 
   showExportDialog.value = false;
 };
+
+// Watch for filter changes
+watch(selectedFilter, () => {
+  applyFilter();
+});
+
+// Watch for data changes (when translations are loaded or updated)
+watch(catalogues, () => {
+  applyFilter();
+}, { deep: true });
+
+// Initialize filter on mount
+onMounted(() => {
+  applyFilter();
+});
 </script>
 
 <style scoped>
@@ -408,6 +480,55 @@ const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onl
 
 .export-button:hover {
   background: #0056b3;
+}
+
+/* Filter Controls */
+.filter-controls {
+  background: #f8f9fa;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  font-weight: 500;
+  color: #495057;
+  font-size: 0.875rem;
+}
+
+.filter-select {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.875rem;
+  color: #495057;
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+}
+
+.filter-stats {
+  margin-left: auto;
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+.filter-count {
+  font-weight: 500;
 }
 
 .translation-content {
@@ -533,6 +654,14 @@ const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onl
 
 .table-row.translated {
   border-left: 4px solid #28a745;
+}
+
+.table-row.modified {
+  border-left: 4px solid #ffc107;
+}
+
+.table-row.translated.modified {
+  border-left: 4px solid #17a2b8;
 }
 
 .table-row:last-child {

@@ -3,9 +3,9 @@ import type { TranslationBackend } from "./index";
 
 // File-based backend implementation
 export class FileBackend implements TranslationBackend {
-  constructor(private file: File) {}
+  constructor(private file: File) { }
 
-  async sync(systemId: string, languageCode: string): Promise<TranslationString[]> {
+  async fetchTranslations(systemId: string, languageCode: string): Promise<TranslationString[]> {
     const text = await this.file.text();
 
     try {
@@ -144,19 +144,16 @@ export class FileBackend implements TranslationBackend {
     return result;
   }
 
-  async submit(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
-    throw new Error('File backend does not support submission');
+  async uploadTranslations(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
+    throw new Error('File backend does not support uploading');
   }
 
   isAvailable(): boolean {
     return true;
   }
 
-  getSystems(): Promise<Array<{ name: string; description: string; id: string }>> {
-    throw new Error('File backend does not support system listing');
-  }
-
-  getStats(systemId: string): Promise<any> {
-    throw new Error('File backend does not support stats');
+  async getStats(systemId: string): Promise<any> {
+    // File backend doesn't have stats, return null
+    return null;
   }
 }

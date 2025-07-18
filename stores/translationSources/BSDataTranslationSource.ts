@@ -4,15 +4,15 @@ import type { TranslationSource } from "./index";
 // BSData translation source implementation
 export class BSDataTranslationSource implements TranslationSource {
   private system: any;
-  
-  constructor(private systemId: string) {}
+
+  constructor(private systemId: string) { }
 
   getId(): string {
     return `bs-${this.systemId}`;
   }
 
   getName(): string {
-    return `${this.systemId} (BattleScribe)`;
+    return `${this.systemId}`;
   }
 
   async getTranslations(languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<{
@@ -24,12 +24,12 @@ export class BSDataTranslationSource implements TranslationSource {
     if (!this.system) {
       await this.loadSystem(progressCallback);
     }
-    
+
     // Import and use bs_translate
     const { extractStrings } = await import("~/assets/ts/bs_translate");
-    
+
     // Extract translations from the system
-    const rawStrings = extractStrings(this.system, progressCallback || (() => {}));
+    const rawStrings = extractStrings(this.system, progressCallback || (() => { }));
 
     // Process translations into catalogues
     const catalogueList: TranslationCatalogue[] = [];
@@ -68,8 +68,8 @@ export class BSDataTranslationSource implements TranslationSource {
   }
 
   private async loadSystem(progressCallback?: (progress: number, message?: string) => void): Promise<void> {
-    const progress = progressCallback || (() => {});
-    
+    const progress = progressCallback || (() => { });
+
     try {
       // Check if it's a GitHub repo (contains /)
       if (this.systemId.includes("/")) {
@@ -87,7 +87,7 @@ export class BSDataTranslationSource implements TranslationSource {
     const { getRepoZip } = await import("~/assets/shared/battlescribe/github");
     const { convertToJson, isAllowedExtension } = await import("~/assets/shared/battlescribe/bs_convert");
     const { GameSystemFiles } = await import("~/assets/shared/battlescribe/local_game_system");
-    
+
     const [owner, repo] = this.systemId.split("/");
 
     progress(10, `Connecting to GitHub repository ${owner}/${repo}...`);
@@ -133,32 +133,32 @@ export class BSDataTranslationSource implements TranslationSource {
 
   private async loadLocalSystem(progress: (progress: number, message?: string) => void): Promise<void> {
     progress(10, "Loading local system...");
-    
+
     // Get local systems from storage
     const localSystemsJson = localStorage.getItem("local_systems") || "[]";
     const localSystems = JSON.parse(localSystemsJson);
-    
+
     const localSystem = localSystems.find((s: any) => s.id === this.systemId);
     if (!localSystem) {
       throw new Error(`Local system not found: ${this.systemId}`);
     }
-    
+
     progress(50, "Processing system data...");
     const { GameSystemFiles } = await import("~/assets/shared/battlescribe/local_game_system");
-    
+
     // Create GameSystemFiles instance from stored data
     this.system = new GameSystemFiles();
-    
+
     if (localSystem.gameSystem) {
       await this.system.setSystem(localSystem.gameSystem);
     }
-    
+
     if (localSystem.catalogues) {
       for (const catalogue of Object.values(localSystem.catalogues)) {
         await this.system.setCatalogue(catalogue);
       }
     }
-    
+
     progress(90, "System loaded successfully");
   }
 }
