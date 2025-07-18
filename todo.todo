@@ -1,0 +1,16 @@
+
+## Translation + Backend:
+  ☐ Consolidate Translations -> Upload to github
+  ☐ Upload Translations
+  ☐ Download Translations
+  ☐ Download Stats
+  ☐ Review Page
+
+  ☐ Maybe github/nr login to filter & reward users?
+    eg Free premium, Discord Role, Moderation powers
+
+## NewRecruit:
+  ☐ UI to Select translations
+  ☐ Client Function for updating translations & save locally
+  ☐ Server Function for updating translations & save to db
+  ☐ Generer a liste de strings pour NR (et quelques categories, eg Tournaments, Builder)
