@@ -1,9 +1,7 @@
 <template>
   <div class="container">
-    <LoadingOverlay title="Loading Translation" />
-
-    <!-- Main content -->
-    <div v-if="!loadingStore.isLoading" class="translation-interface">
+      <!-- Main content -->
+      <div class="translation-interface">
       <div class="header">
         <button @click="goBack" class="back-button">← Back to Overview</button>
         <div class="header-info">
@@ -68,21 +66,17 @@
       </div>
 
       <div v-else class="no-translation"> Translation not found. </div>
-    </div>
+      </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useLoadingStore } from "~/stores/loadingStore";
-import { useSystemStore } from "~/stores/systemStore";
 import { useTranslationStore } from "~/stores/translationStore";
 
 const route = useRoute();
 const router = useRouter();
-const loadingStore = useLoadingStore();
-const systemStore = useSystemStore();
 const translationStore = useTranslationStore();
 
 // Route params
@@ -91,7 +85,6 @@ const languageCode = computed(() => route.params.lang as string);
 const currentKey = computed(() => route.params.key as string);
 
 // Translation data
-const languageName = ref("");
 const currentIndex = ref(0);
 
 // Computed properties from store
@@ -103,38 +96,30 @@ const currentTranslation = computed(() => allTranslations.value[currentIndex.val
 const currentCatalogue = computed(() => currentTranslation.value?.catalogue || "");
 
 // Language mapping
-const languageNames: Record<string, string> = {
-  en: "English",
-  es: "Spanish",
-  fr: "French",
-  de: "German",
-  it: "Italian",
-  pt: "Portuguese",
-  ru: "Russian",
-  ja: "Japanese",
-  zh: "Chinese",
-};
+const languageName = computed(() => {
+  const languageNames: Record<string, string> = {
+    en: "English",
+    es: "Spanish",
+    fr: "French",
+    de: "German",
+    it: "Italian",
+    pt: "Portuguese",
+    ru: "Russian",
+    ja: "Japanese",
+    zh: "Chinese",
+  };
+  return languageNames[languageCode.value] || languageCode.value;
+});
 
-const loadTranslationData = async (): Promise<void> => {
-  try {
-    // Ensure system is loaded
-    await systemStore.ensureSystemLoaded(systemId.value);
-
-    // Load translations into store if not already loaded
-    await translationStore.loadTranslations(systemId.value, languageCode.value);
-
-    // Find the current translation by key
-    const decodedKey = decodeURIComponent(currentKey.value);
-    const keyIndex = allTranslations.value.findIndex((t) => t.key === decodedKey);
-    if (keyIndex !== -1) {
-      currentIndex.value = keyIndex;
-    } else {
-      // If key not found, default to first item
-      currentIndex.value = 0;
-    }
-  } catch (error) {
-    console.error("Failed to load translation data:", error);
-    throw error;
+const updateCurrentIndex = () => {
+  // Find the current translation by key
+  const decodedKey = decodeURIComponent(currentKey.value);
+  const keyIndex = allTranslations.value.findIndex((t) => t.key === decodedKey);
+  if (keyIndex !== -1) {
+    currentIndex.value = keyIndex;
+  } else {
+    // If key not found, default to first item
+    currentIndex.value = 0;
   }
 };
 
@@ -206,11 +191,17 @@ watch(
   () => currentKey.value,
   (newKey) => {
     if (newKey && allTranslations.value.length > 0) {
-      const decodedKey = decodeURIComponent(newKey);
-      const keyIndex = allTranslations.value.findIndex((t) => t.key === decodedKey);
-      if (keyIndex !== -1 && keyIndex !== currentIndex.value) {
-        currentIndex.value = keyIndex;
-      }
+      updateCurrentIndex();
+    }
+  }
+);
+
+// Watch for translation data changes to update index
+watch(
+  () => allTranslations.value.length,
+  (newLength) => {
+    if (newLength > 0) {
+      updateCurrentIndex();
     }
   }
 );
@@ -228,20 +219,12 @@ const handleKeyPress = (event: KeyboardEvent) => {
   }
 };
 
-onMounted(async () => {
-  languageName.value = languageNames[languageCode.value] || languageCode.value;
-
-  try {
-    await loadingStore.withLoading(async () => {
-      await loadTranslationData();
-    }, "Loading translation...");
-
-    // Add keyboard listeners
-    window.addEventListener("keydown", handleKeyPress);
-  } catch (error) {
-    console.error("Failed to initialize translation page:", error);
-    await router.push("/");
-  }
+onMounted(() => {
+  // Set initial index based on current key
+  updateCurrentIndex();
+  
+  // Add keyboard listeners
+  window.addEventListener("keydown", handleKeyPress);
 });
 
 // Cleanup keyboard listeners
@@ -251,11 +234,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
 
 .translation-interface {
   display: flex;

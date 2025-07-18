@@ -1,5 +1,10 @@
 The purpose of this project is for the community to translate open-source tabletop wargames files to various languages
 
+## Important
+
+    Dont try to run or build the project.
+    Let it be known if a change is likely to have future maintability issues,  performance issues, or is spaghetti code.
+
 ## Expected user workflow:
 
 Open the tool
@@ -19,7 +24,6 @@ Translation raw text display and translation input should support new lines
 ### Stores (Pinia)
 
 - `stores/loadingStore.ts` - Centralized loading state management with progress tracking
-- `stores/systemStore.ts` - Game system loading and management (GitHub repos, local systems)
 - `stores/promptStore.ts` - User prompt/dialog state persistence
 - `stores/translationStore.ts` - Translation management with IndexedDB storage and backend sync
 

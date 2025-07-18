@@ -1,55 +1,28 @@
 <template>
   <div class="container">
-    <LoadingOverlay title="Loading Translation Data" />
 
     <!-- Export Dialog -->
-    <div v-if="showExportDialog" class="dialog-overlay" @click.self="showExportDialog = false">
-      <div class="dialog">
-        <div class="dialog-header">
-          <h2>Export Translations</h2>
-          <button @click="showExportDialog = false" class="dialog-close">×</button>
-        </div>
-        <div class="dialog-content">
-          <p>Select export format:</p>
-          <div class="format-options">
-            <label class="format-option">
-              <input type="radio" v-model="exportFormat" value="json" />
-              <span>JSON (Full)</span>
-              <small>Complete translation data with metadata</small>
-            </label>
-            <label class="format-option">
-              <input type="radio" v-model="exportFormat" value="json-kv" />
-              <span>JSON (Key-Value)</span>
-              <small>Simple key-value pairs format</small>
-            </label>
-            <label class="format-option">
-              <input type="radio" v-model="exportFormat" value="csv" />
-              <span>CSV</span>
-              <small>Spreadsheet-compatible format</small>
-            </label>
-            <label class="format-option">
-              <input type="radio" v-model="exportFormat" value="po" />
-              <span>PO (gettext)</span>
-              <small>GNU gettext format for translation tools</small>
-            </label>
-          </div>
-          <div class="export-options">
-            <label class="checkbox-option">
-              <input type="checkbox" v-model="exportOnlyTranslated" :disabled="exportOnlyUntranslated" />
-              <span>Export only translated strings</span>
-            </label>
-            <label class="checkbox-option">
-              <input type="checkbox" v-model="exportOnlyUntranslated" :disabled="exportOnlyTranslated" />
-              <span>Export only untranslated strings</span>
-            </label>
-          </div>
-        </div>
-        <div class="dialog-footer">
-          <button @click="showExportDialog = false" class="dialog-button cancel">Cancel</button>
-          <button @click="exportTranslations" class="dialog-button primary">Export</button>
-        </div>
-      </div>
-    </div>
+    <ExportDialog :show="showExportDialog" @close="showExportDialog = false" @export="handleExport" />
+
+    <!-- Submit Dialog -->
+    <SubmitDialog
+      :show="showSubmitDialog"
+      :is-submitting="isSubmitting"
+      @close="showSubmitDialog = false"
+      @submit="handleSubmit"
+    />
+
+    <!-- Sync Dialog -->
+    <SyncDialog
+      :show="showSyncDialog"
+      :sync-conflicts="syncConflicts"
+      :selected-file="selectedFile"
+      :is-syncing="isSyncing"
+      :can-sync="canSync"
+      @close="closeSyncDialog"
+      @file-select="handleFileSelect"
+      @sync="handleSyncSubmit"
+    />
 
     <!-- Main content -->
     <div class="translation-interface">
@@ -59,7 +32,24 @@
         <div class="header-stats">
           <span>{{ translatedCount }}/{{ totalStrings }} translated</span>
         </div>
-        <button @click="showExportDialog = true" class="export-button"> Export Translations </button>
+        <div class="header-actions">
+          <button
+            @click="showSyncDialog = true"
+            class="sync-button"
+            :title="canSync ? 'Sync translations from backend' : 'Import translations from file'"
+          >
+            Sync Translations
+          </button>
+          <button
+            @click="showSubmitDialog = true"
+            class="submit-button"
+            :disabled="!canSubmit"
+            :title="canSubmit ? 'Submit translations to backend' : 'No backend configured'"
+          >
+            Submit Translations
+          </button>
+          <button @click="showExportDialog = true" class="export-button"> Export Translations </button>
+        </div>
       </div>
 
       <div class="translation-content scrollable">
@@ -137,60 +127,48 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useLoadingStore } from "~/stores/loadingStore";
-import { useSystemStore } from "~/stores/systemStore";
 import { useTranslationStore, type ExportFormat } from "~/stores/translationStore";
+import ExportDialog from "~/components/ExportDialog.vue";
+import SubmitDialog from "~/components/SubmitDialog.vue";
+import SyncDialog from "~/components/SyncDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
-const loadingStore = useLoadingStore();
-const systemStore = useSystemStore();
 const translationStore = useTranslationStore();
 
-// Translation data
-const languageCode = ref("");
-const languageName = ref("");
 
 // Hierarchy data
 const systemExpanded = ref(true);
 const expandedCatalogues = ref(new Set<string>());
 
-// Export dialog
+// Dialog states
 const showExportDialog = ref(false);
-const exportFormat = ref<ExportFormat>("json");
-const exportOnlyTranslated = ref(false);
-const exportOnlyUntranslated = ref(false);
+const showSubmitDialog = ref(false);
+const showSyncDialog = ref(false);
+const syncConflicts = ref<Array<{ key: string; original: string; local: string; server: string }>>([]);
+const selectedFile = ref<File | null>(null);
 
 // Computed properties from store
-const systemName = computed(() => systemStore.systemName || "Unknown System");
+const systemName = computed(() => translationStore.systemName);
 const catalogues = computed(() => translationStore.catalogues);
 const totalStrings = computed(() => translationStore.totalStrings);
 const translatedCount = computed(() => translationStore.translatedCount);
 const systemStringCount = computed(() => translationStore.systemStringCount);
 
-const loadTranslationData = async (updateProgress: (progress: number, message?: string) => void): Promise<void> => {
-  try {
-    updateProgress(85, "Loading translation strings...");
-    await translationStore.loadTranslations(route.params.system as string, languageCode.value, (progress, message) => {
-      updateProgress(85 + Math.floor(progress * 0.15), message);
-    });
-  } catch (error) {
-    console.error("Failed to load translation data:", error);
-    throw error;
-  }
-};
+// Backend computed properties
+const canSubmit = computed(() => translationStore.canSubmit);
+const isSubmitting = computed(() => translationStore.isSubmitting);
+const canSync = computed(() => translationStore.canSync);
+const isSyncing = computed(() => translationStore.isSyncing);
 
-onMounted(async () => {
-  // Get system and language from route
-  const systemId = route.params.system as string;
-  languageCode.value = route.params.lang as string;
-
-  // Map language codes to names (this would come from actual data)
+// Get language info from route
+const languageCode = computed(() => route.params.lang as string);
+const languageName = computed(() => {
   const languageNames: Record<string, string> = {
     en: "English",
-    es: "Spanish",
+    es: "Spanish", 
     fr: "French",
     de: "German",
     it: "Italian",
@@ -199,25 +177,7 @@ onMounted(async () => {
     ja: "Japanese",
     zh: "Chinese",
   };
-
-  languageName.value = languageNames[languageCode.value] || languageCode.value;
-
-  try {
-    await loadingStore.withLoading(async (updateProgress) => {
-      // Ensure system is loaded
-      await systemStore.ensureSystemLoaded(systemId, updateProgress);
-
-      // Load translation data
-      await loadTranslationData(updateProgress);
-
-      // Small delay to show completion
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }, "Initializing...");
-  } catch (error) {
-    console.error("Failed to initialize translation page:", error);
-    // Handle error - redirect to home if system doesn't exist
-    await router.push("/");
-  }
+  return languageNames[languageCode.value] || languageCode.value;
 });
 
 const goBack = () => {
@@ -256,26 +216,89 @@ const editString = (string: any) => {
   router.push(`/translate/${encodeURIComponent(systemId)}/${languageCode.value}/${encodeURIComponent(string.key)}`);
 };
 
-const exportTranslations = () => {
+const handleFileSelect = (file: File) => {
+  selectedFile.value = file;
+};
+
+const closeSyncDialog = () => {
+  showSyncDialog.value = false;
+  selectedFile.value = null;
+  syncConflicts.value = [];
+};
+
+const handleSyncSubmit = async (data: {
+  syncStrategy: "server-wins" | "client-wins" | "ask-user";
+  selectedFile: File | null;
+}) => {
+  try {
+    let result;
+
+    if (data.selectedFile) {
+      // Use file-based sync
+      result = await translationStore.syncFromFile(
+        data.selectedFile,
+        route.params.system as string,
+        languageCode.value,
+        data.syncStrategy
+      );
+    } else {
+      // Use backend sync
+      result = await translationStore.syncFromBackend(
+        route.params.system as string,
+        languageCode.value,
+        data.syncStrategy
+      );
+    }
+
+    if (result.conflicts.length > 0 && data.syncStrategy === "ask-user") {
+      syncConflicts.value = result.conflicts;
+      // Keep dialog open to show conflicts
+      return;
+    }
+
+    showSyncDialog.value = false;
+    syncConflicts.value = [];
+    selectedFile.value = null;
+
+    // Show success message
+    const message = data.selectedFile ? "Translations imported successfully" : "Translations synced successfully";
+    console.log(message);
+  } catch (error) {
+    console.error("Failed to sync translations:", error);
+    alert("Failed to sync translations: " + error.message);
+  }
+};
+
+const handleSubmit = async (data: { onlyModified: boolean }) => {
+  try {
+    await translationStore.submitToBackend(route.params.system as string, languageCode.value, data.onlyModified);
+
+    showSubmitDialog.value = false;
+
+    // Show success message (you might want to add a toast/notification system)
+    console.log("Translations submitted successfully");
+  } catch (error) {
+    console.error("Failed to submit translations:", error);
+    // Show error message to user
+    alert("Failed to submit translations: " + error.message);
+  }
+};
+
+const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onlyUntranslated: boolean }) => {
   translationStore.downloadExport(
-    exportFormat.value,
+    data.format,
     languageCode.value,
     languageName.value,
-    systemStore.systemName || "system",
-    exportOnlyTranslated.value,
-    exportOnlyUntranslated.value
+    translationStore.systemName,
+    data.onlyTranslated,
+    data.onlyUntranslated
   );
-  
+
   showExportDialog.value = false;
 };
 </script>
 
 <style scoped>
-.container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
 
 /* Main interface */
 .translation-interface {
@@ -317,6 +340,54 @@ const exportTranslations = () => {
   color: #666;
   font-size: 0.875rem;
   flex: 1;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.sync-button {
+  padding: 0.5rem 1rem;
+  background: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.sync-button:hover:not(:disabled) {
+  background: #138496;
+}
+
+.sync-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.submit-button {
+  padding: 0.5rem 1rem;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.submit-button:hover:not(:disabled) {
+  background: #218838;
+}
+
+.submit-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .export-button {
@@ -574,174 +645,5 @@ const exportTranslations = () => {
 
 .status-icon.cross {
   color: #dc3545;
-}
-
-/* Dialog styles */
-.dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.dialog {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  width: 90%;
-  max-width: 500px;
-}
-
-.dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.5rem;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.dialog-header h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-.dialog-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #6c757d;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s;
-}
-
-.dialog-close:hover {
-  color: #333;
-}
-
-.dialog-content {
-  padding: 1.5rem;
-}
-
-.dialog-content p {
-  margin: 0 0 1rem 0;
-  color: #495057;
-}
-
-.format-options {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.format-option {
-  display: flex;
-  align-items: flex-start;
-  padding: 1rem;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.format-option:hover {
-  background: #f8f9fa;
-  border-color: #007bff;
-}
-
-.format-option input[type="radio"] {
-  margin-right: 0.75rem;
-  margin-top: 0.125rem;
-}
-
-.format-option span {
-  font-weight: 500;
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
-.format-option small {
-  display: block;
-  color: #6c757d;
-  font-size: 0.875rem;
-}
-
-.export-options {
-  border-top: 1px solid #dee2e6;
-  padding-top: 1rem;
-}
-
-.checkbox-option {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  margin-bottom: 0.75rem;
-}
-
-.checkbox-option:last-child {
-  margin-bottom: 0;
-}
-
-.checkbox-option input[type="checkbox"] {
-  margin-right: 0.5rem;
-}
-
-.checkbox-option input[type="checkbox"]:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.checkbox-option input[type="checkbox"]:disabled ~ span {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 1.5rem;
-  border-top: 1px solid #dee2e6;
-}
-
-.dialog-button {
-  padding: 0.5rem 1.25rem;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-  background: white;
-}
-
-.dialog-button:hover {
-  background: #f8f9fa;
-}
-
-.dialog-button.primary {
-  background: #007bff;
-  color: white;
-  border-color: #007bff;
-}
-
-.dialog-button.primary:hover {
-  background: #0056b3;
-  border-color: #0056b3;
-}
-small {
-  margin-left: auto;
-  text-align: right;
 }
 </style>

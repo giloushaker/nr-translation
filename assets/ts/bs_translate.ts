@@ -11,7 +11,7 @@ export interface ITranslatable {
     text: string,
 }
 
-export function extractTranslations(system: GameSystemFiles, progressCallback: (progress: number, message: string) => void) {
+export function extractStrings(system: GameSystemFiles, progressCallback: (progress: number, message: string) => void) {
     const blacklistedKeys = new Set([
         "id",
         "type",

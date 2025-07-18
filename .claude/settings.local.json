@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(find:*)"
     ],
     "deny": []
   }

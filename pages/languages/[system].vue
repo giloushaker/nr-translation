@@ -5,64 +5,52 @@
     <!-- Main content -->
     <div v-if="!loadingStore.isLoading">
       <div class="header">
+        <button @click="goHome" class="back-button">← Back to Home</button>
         <h1>Select Language</h1>
-        <div v-if="systemStore.systemName" class="system-info">
-          System: {{ systemStore.systemName }}
-        </div>
+        <div v-if="systemName" class="system-info"> System: {{ systemName }} </div>
       </div>
 
       <div class="languages-grid">
-      <div 
-        v-for="lang in languages" 
-        :key="lang.code"
-        class="language-card"
-        @click="selectLanguage(lang.code)"
-      >
-        <div class="language-header">
-          <h3>{{ lang.name }}</h3>
-          <span class="language-code">{{ lang.code }}</span>
-        </div>
-        
-        <div class="stats-container">
-          <div class="stat-row">
-            <span class="stat-label">Translated:</span>
-            <div class="progress-bar">
-              <div 
-                class="progress-fill translated"
-                :style="{ width: lang.translatedPercent + '%' }"
-              ></div>
-              <span class="progress-text">{{ lang.translatedPercent }}%</span>
-            </div>
+        <div v-for="lang in languages" :key="lang.code" class="language-card" @click="selectLanguage(lang.code)">
+          <div class="language-header">
+            <h3>{{ lang.name }}</h3>
+            <span class="language-code">{{ lang.code }}</span>
           </div>
-          
-          <div class="stat-row">
-            <span class="stat-label">Reviewed:</span>
-            <div class="progress-bar">
-              <div 
-                class="progress-fill reviewed"
-                :style="{ width: lang.reviewedPercent + '%' }"
-              ></div>
-              <span class="progress-text">{{ lang.reviewedPercent }}%</span>
+
+          <div class="stats-container">
+            <div class="stat-row">
+              <span class="stat-label">Translated:</span>
+              <div class="progress-bar">
+                <div class="progress-fill translated" :style="{ width: lang.translatedPercent + '%' }"></div>
+                <span class="progress-text">{{ lang.translatedPercent }}%</span>
+              </div>
             </div>
-          </div>
-          
-          <div class="stat-details">
-            <div class="stat-item">
-              <span class="stat-value">{{ lang.totalStrings }}</span>
-              <span class="stat-sublabel">Total strings</span>
+
+            <div class="stat-row">
+              <span class="stat-label">Reviewed:</span>
+              <div class="progress-bar">
+                <div class="progress-fill reviewed" :style="{ width: lang.reviewedPercent + '%' }"></div>
+                <span class="progress-text">{{ lang.reviewedPercent }}%</span>
+              </div>
             </div>
-            <div class="stat-item">
-              <span class="stat-value">{{ lang.translatedStrings }}</span>
-              <span class="stat-sublabel">Translated</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-value">{{ lang.untranslatedStrings }}</span>
-              <span class="stat-sublabel">Untranslated</span>
+
+            <div class="stat-details">
+              <div class="stat-item">
+                <span class="stat-value">{{ lang.totalStrings }}</span>
+                <span class="stat-sublabel">Total strings</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{{ lang.translatedStrings }}</span>
+                <span class="stat-sublabel">Translated</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{{ lang.untranslatedStrings }}</span>
+                <span class="stat-sublabel">Untranslated</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
       <div v-if="languages.length === 0" class="no-languages">
         No languages available. Please load a game system first.
@@ -72,148 +60,174 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useLoadingStore } from '~/stores/loadingStore'
-import { useSystemStore } from '~/stores/systemStore'
+import { ref, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useLoadingStore } from "~/stores/loadingStore";
+
+// Explicitly disable layout for this page to prevent conflicts with translate layout
+definePageMeta({
+  layout: false
+});
 
 interface Language {
-  code: string
-  name: string
-  translatedPercent: number
-  reviewedPercent: number
-  totalStrings: number
-  translatedStrings: number
-  untranslatedStrings: number
+  code: string;
+  name: string;
+  translatedPercent: number;
+  reviewedPercent: number;
+  totalStrings: number;
+  translatedStrings: number;
+  untranslatedStrings: number;
 }
 
-const route = useRoute()
-const router = useRouter()
-const loadingStore = useLoadingStore()
-const systemStore = useSystemStore()
-const languages = ref<Language[]>([])
+const route = useRoute();
+const router = useRouter();
+const loadingStore = useLoadingStore();
+const languages = ref<Language[]>([]);
+const systemName = ref("");
 
 // Sample languages data - this should be populated from actual translation data
 const sampleLanguages: Language[] = [
   {
-    code: 'en',
-    name: 'English',
+    code: "en",
+    name: "English",
     translatedPercent: 100,
     reviewedPercent: 100,
     totalStrings: 1500,
     translatedStrings: 1500,
-    untranslatedStrings: 0
+    untranslatedStrings: 0,
   },
   {
-    code: 'es',
-    name: 'Spanish',
+    code: "es",
+    name: "Spanish",
     translatedPercent: 85,
     reviewedPercent: 72,
     totalStrings: 1500,
     translatedStrings: 1275,
-    untranslatedStrings: 225
+    untranslatedStrings: 225,
   },
   {
-    code: 'fr',
-    name: 'French',
+    code: "fr",
+    name: "French",
     translatedPercent: 92,
     reviewedPercent: 85,
     totalStrings: 1500,
     translatedStrings: 1380,
-    untranslatedStrings: 120
+    untranslatedStrings: 120,
   },
   {
-    code: 'de',
-    name: 'German',
+    code: "de",
+    name: "German",
     translatedPercent: 78,
     reviewedPercent: 65,
     totalStrings: 1500,
     translatedStrings: 1170,
-    untranslatedStrings: 330
+    untranslatedStrings: 330,
   },
   {
-    code: 'it',
-    name: 'Italian',
+    code: "it",
+    name: "Italian",
     translatedPercent: 65,
     reviewedPercent: 45,
     totalStrings: 1500,
     translatedStrings: 975,
-    untranslatedStrings: 525
+    untranslatedStrings: 525,
   },
   {
-    code: 'pt',
-    name: 'Portuguese',
+    code: "pt",
+    name: "Portuguese",
     translatedPercent: 70,
     reviewedPercent: 60,
     totalStrings: 1500,
     translatedStrings: 1050,
-    untranslatedStrings: 450
+    untranslatedStrings: 450,
   },
   {
-    code: 'ru',
-    name: 'Russian',
+    code: "ru",
+    name: "Russian",
     translatedPercent: 55,
     reviewedPercent: 40,
     totalStrings: 1500,
     translatedStrings: 825,
-    untranslatedStrings: 675
+    untranslatedStrings: 675,
   },
   {
-    code: 'ja',
-    name: 'Japanese',
+    code: "ja",
+    name: "Japanese",
     translatedPercent: 45,
     reviewedPercent: 30,
     totalStrings: 1500,
     translatedStrings: 675,
-    untranslatedStrings: 825
+    untranslatedStrings: 825,
   },
   {
-    code: 'zh',
-    name: 'Chinese',
+    code: "zh",
+    name: "Chinese",
     translatedPercent: 40,
     reviewedPercent: 25,
     totalStrings: 1500,
     translatedStrings: 600,
-    untranslatedStrings: 900
-  }
-]
+    untranslatedStrings: 900,
+  },
+];
 
 const loadSystem = async (systemId: string) => {
   await loadingStore.withLoading(async (updateProgress) => {
     try {
-      await systemStore.ensureSystemLoaded(systemId, updateProgress)
+      updateProgress(30, "Loading system information...");
+      console.log("Loading system:", systemId);
       
-      updateProgress(100, 'Complete!')
-      
-      // Small delay to show completion
-      await new Promise(resolve => setTimeout(resolve, 300))
-      
-      // Load languages
-      languages.value = sampleLanguages
-      
-    } catch (error) {
-      console.error('Failed to load system:', error)
-      router.push('/')
-      throw error
-    }
-  }, 'Initializing...')
-}
+      // Get just the system name without loading full translations
+      const translationSources = await import("~/stores/translationSources");
+      systemName.value = await translationSources.getSystemName(systemId);
+      console.log("System name loaded:", systemName.value);
 
-onMounted(async () => {
-  const systemId = route.params.system as string
-  
+      updateProgress(100, "Complete!");
+
+      // Small delay to show completion
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // Load languages
+      languages.value = sampleLanguages;
+    } catch (error) {
+      console.error("Failed to load system:", error, "for systemId:", systemId);
+      // Don't redirect to home, just show error in console and use fallback name
+      systemName.value = systemId; // Fallback to systemId as name
+      languages.value = sampleLanguages;
+    }
+  }, "Initializing...");
+};
+
+const initializeLanguagePage = async () => {
+  const systemId = route.params.system as string;
+  console.log("Languages page init:", { systemId, path: route.path });
+
   if (!systemId) {
-    router.push('/')
-    return
+    console.log("No systemId in languages page, redirecting to home");
+    router.push("/");
+    return;
   }
-  
-  await loadSystem(systemId)
-})
+
+  await loadSystem(systemId);
+};
+
+onMounted(initializeLanguagePage);
+
+// Watch for route changes to handle keepalive navigation
+watch(
+  () => route.params.system,
+  async () => {
+    await initializeLanguagePage();
+  }
+);
+
+const goHome = () => {
+  router.push("/");
+};
 
 const selectLanguage = (langCode: string) => {
-  const systemId = route.params.system as string
-  router.push(`/translate/${encodeURIComponent(systemId)}/${langCode}`)
-}
+  const systemId = route.params.system as string;
+  router.push(`/translate/${encodeURIComponent(systemId)}/${langCode}`);
+};
 </script>
 
 <style scoped>
@@ -226,6 +240,22 @@ const selectLanguage = (langCode: string) => {
 .header {
   margin-bottom: 2rem;
   text-align: center;
+  position: relative;
+}
+
+.back-button {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+
+  padding: 0.5rem 1rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
 }
 
 .system-info {
@@ -356,5 +386,4 @@ h1 {
   margin: 0;
   font-size: 2rem;
 }
-
 </style>

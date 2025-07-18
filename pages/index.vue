@@ -7,7 +7,7 @@
       <h2>Quick Select</h2>
       <div class="repo-grid">
         <div v-for="repo in quickSelectRepos" :key="repo.url" class="repo-card" @click="loadQuickRepo(repo)">
-          <div class="repo-icon">📁</div>
+          <div class="repo-icon">{{ repo.isTranslationSource ? '🌐' : '📁' }}</div>
           <div class="repo-info">
             <h3>{{ repo.name }}</h3>
             <p>{{ repo.description }}</p>
@@ -95,6 +95,13 @@ const gameSystem = new GameSystemFiles();
 // Quick select repositories
 const quickSelectRepos = ref([
   {
+    name: "NewRecruit",
+    description: "NewRecruit application interface strings",
+    url: "newrecruit",
+    displayUrl: "newrecruit",
+    isTranslationSource: true,
+  },
+  {
     name: "Warhammer 40k 10th Edition",
     description: "Official Warhammer 40,000 10th Edition rules",
     url: "https://github.com/BSData/wh40k-10e",
@@ -103,32 +110,32 @@ const quickSelectRepos = ref([
   {
     name: "Warhammer 40k 9th Edition",
     description: "Warhammer 40,000 9th Edition rules",
-    url: "https://github.com/BSData/wh40k",
-    displayUrl: "BSData/wh40k",
+    url: "https://github.com/BSData/wh40k-9e",
+    displayUrl: "BSData/wh40k-9e",
   },
   {
-    name: "Age of Sigmar",
+    name: "Age of Sigmar 4.0",
     description: "Warhammer Age of Sigmar rules",
-    url: "https://github.com/BSData/warhammer-age-of-sigmar",
-    displayUrl: "BSData/warhammer-age-of-sigmar",
+    url: "https://github.com/BSData/age-of-sigmar-4th",
+    displayUrl: "BSData/age-of-sigmar-4th",
   },
   {
-    name: "Kill Team",
+    name: "Kill Team (2024)",
     description: "Warhammer 40k Kill Team rules",
     url: "https://github.com/BSData/wh40k-killteam",
     displayUrl: "BSData/wh40k-killteam",
   },
   {
-    name: "Blood Bowl",
-    description: "Blood Bowl tabletop game rules",
-    url: "https://github.com/BSData/bloodbowl",
-    displayUrl: "BSData/bloodbowl",
+    name: "Horus Heresy (2022)",
+    description: "Horus Heresy (2022) game rules",
+    url: "https://github.com/BSData/horus-heresy-2nd-edition",
+    displayUrl: "BSData/horus-heresy-2nd-edition",
   },
   {
-    name: "Necromunda",
-    description: "Necromunda skirmish game rules",
-    url: "https://github.com/BSData/necromunda",
-    displayUrl: "BSData/necromunda",
+    name: "Trench Crusade",
+    description: "Trench Crusade game rules",
+    url: "https://github.com/Fawkstrot11/TrenchCrusade",
+    displayUrl: "Fawkstrot11/TrenchCrusade",
   },
 ]);
 
@@ -251,9 +258,15 @@ const loadFromLocal = async (event: Event) => {
 
 // Quick select methods
 const loadQuickRepo = async (repo: any) => {
-  // For quick repos, navigate directly with the owner/repo format
-  const systemId = repo.displayUrl; // This contains "owner/repo" format
-  await router.push(`/languages/${encodeURIComponent(systemId)}`);
+  // For translation sources like NewRecruit, navigate directly
+  if (repo.isTranslationSource) {
+    const systemId = repo.displayUrl;
+    await router.push(`/languages/${encodeURIComponent(systemId)}`);
+  } else {
+    // For quick repos, navigate directly with the owner/repo format
+    const systemId = repo.displayUrl; // This contains "owner/repo" format
+    await router.push(`/languages/${encodeURIComponent(systemId)}`);
+  }
 };
 
 const loadLocalSystem = async (system: any) => {

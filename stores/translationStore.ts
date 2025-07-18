@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
-import { extractTranslations as extractStrings } from "~/assets/ts/bs_translate";
+import { TranslationBackend, NoOpBackend, FileBackend } from "./translationBackends";
+import { type TranslationSource } from "./translationSources";
 
 export interface TranslationString {
   id: string;
@@ -20,97 +21,6 @@ export interface TranslationCatalogue {
 
 export type ExportFormat = "json" | "json-kv" | "csv" | "po";
 
-// Backend interface for translation sync
-interface TranslationBackend {
-  // Sync translations from backend to local
-  sync(systemId: string, languageCode: string): Promise<TranslationString[]>;
-
-  // Submit translations from local to backend
-  submit(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void>;
-
-  // Check if backend is available/configured
-  isAvailable(): boolean;
-
-  // Get backend configuration info
-  getInfo(): { name: string; description: string; };
-}
-
-// Default no-op backend implementation
-class NoOpBackend implements TranslationBackend {
-  async sync(systemId: string, languageCode: string): Promise<TranslationString[]> {
-    return [];
-  }
-
-  async submit(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
-    // No-op
-  }
-
-  isAvailable(): boolean {
-    return false;
-  }
-
-  getInfo() {
-    return { name: "None", description: "No backend configured" };
-  }
-}
-
-// HTTP/REST backend implementation
-class HttpBackend implements TranslationBackend {
-  constructor(private baseUrl: string, private apiKey?: string) { }
-
-  async sync(systemId: string, languageCode: string): Promise<TranslationString[]> {
-    const url = `${this.baseUrl}/translations/${systemId}/${languageCode}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
-
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      throw new Error(`Sync failed: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.translations || [];
-  }
-
-  async submit(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
-    const url = `${this.baseUrl}/translations/${systemId}/${languageCode}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ translations }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Submit failed: ${response.status} ${response.statusText}`);
-    }
-  }
-
-  isAvailable(): boolean {
-    return !!this.baseUrl;
-  }
-
-  getInfo() {
-    return {
-      name: "HTTP Backend",
-      description: `REST API at ${this.baseUrl}`
-    };
-  }
-}
-
 export const useTranslationStore = defineStore("translation", {
   state: () => ({
     strings: {} as Record<string, Set<string>>,
@@ -121,6 +31,7 @@ export const useTranslationStore = defineStore("translation", {
     totalStrings: 0,
     translatedCount: 0,
     backend: new NoOpBackend() as TranslationBackend,
+    translationSource: null as TranslationSource | null,
     isSyncing: false,
     isSubmitting: false,
     lastSyncTime: null as number | null,
@@ -129,6 +40,8 @@ export const useTranslationStore = defineStore("translation", {
 
   getters: {
     systemStringCount: (state) => state.totalStrings,
+
+    systemName: (state) => state.translationSource?.getName() || "Unknown System",
 
     getCatalogueById: (state) => (catalogueId: string) => {
       return state.catalogues.find(cat => cat.id === catalogueId);
@@ -141,8 +54,6 @@ export const useTranslationStore = defineStore("translation", {
     getTranslationsByStatus: (state) => (translated: boolean) => {
       return state.translations.filter(t => t.translated === translated);
     },
-
-    backendInfo: (state) => state.backend.getInfo(),
 
     canSync: (state) => state.backend.isAvailable() && !state.isSyncing,
 
@@ -326,63 +237,69 @@ export const useTranslationStore = defineStore("translation", {
       }
     },
 
-    async loadTranslations(systemId: string, languageCode?: string, progressCallback?: (progress: number, message?: string) => void) {
-      // Only load if not already loaded for this system
-      if (this.isLoaded && this.currentSystemId === systemId) {
+    async loadTranslationsFromSource(translationSource: TranslationSource, languageCode?: string, progressCallback?: (progress: number, message?: string) => void) {
+      const sourceId = translationSource.getId();
+      
+      // Only load if not already loaded for this source
+      if (this.isLoaded && this.currentSystemId === sourceId) {
         return;
       }
 
       try {
-        // Extract translations from the system
-        const rawStrings = extractStrings(globalThis.system, progressCallback || (() => { }));
+        this.translationSource = translationSource;
+        this.currentSystemId = sourceId;
+
+        // Get translations using the source
+        const { strings: rawStrings, catalogues: catalogueList, translations: allTranslations } =
+          await this.translationSource.getTranslations(languageCode || 'en', progressCallback);
+
         this.strings = rawStrings;
         globalThis.strings = rawStrings;
-
-        // Process translations into catalogues
-        const catalogueList: TranslationCatalogue[] = [];
-        const allTranslations: TranslationString[] = [];
-
-        Object.entries(rawStrings).forEach(([catalogueName, stringSet]) => {
-          const strings: TranslationString[] = [];
-
-          Array.from(stringSet).forEach((str, index) => {
-            const translationString: TranslationString = {
-              id: `${catalogueName}-${index}`,
-              key: str,
-              original: str,
-              translation: "",
-              translated: false,
-              catalogue: catalogueName,
-            };
-
-            strings.push(translationString);
-            allTranslations.push(translationString);
-          });
-
-          catalogueList.push({
-            id: catalogueName,
-            name: catalogueName,
-            stringCount: stringSet.size,
-            strings: strings,
-          });
-        });
-
         this.catalogues = catalogueList;
         this.translations = allTranslations;
-        globalThis.translations = allTranslations
+        globalThis.translations = allTranslations;
         this.totalStrings = allTranslations.length;
         this.translatedCount = allTranslations.filter(s => s.translated).length;
-        this.currentSystemId = systemId;
         this.isLoaded = true;
+
+        // Store the translation source
+        this.translationSource = translationSource;
 
         // Try to restore saved translations from IndexedDB
         if (languageCode) {
-          await this.loadTranslationsFromLocal(systemId, languageCode);
+          await this.loadTranslationsFromLocal(sourceId, languageCode);
         }
       } catch (error) {
         console.error("Failed to load translations:", error);
         throw error;
       }
+    },
+
+    async ensureTranslationsLoaded(systemId: string, languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<void> {
+      console.log("ensureTranslationsLoaded called:", { 
+        systemId, 
+        languageCode, 
+        isLoaded: this.isLoaded, 
+        currentSystemId: this.currentSystemId 
+      });
+      
+      // If translations are already loaded for this exact system, return
+      if (this.isLoaded && this.currentSystemId === systemId) {
+        console.log("Translations already loaded for this system, skipping");
+        return;
+      }
+
+      console.log("Loading translations for new system, clearing cache");
+      // Always clear cache when loading a different system
+      this.clearCache();
+
+      // Create the appropriate translation source for this systemId
+      const { createTranslationSourceForSystem } = await import("./translationSources");
+      const source = createTranslationSourceForSystem(systemId);
+      
+      // Load translations using the source
+      await this.loadTranslationsFromSource(source, languageCode, progressCallback);
+      this.currentSystemId = systemId;
     },
 
     updateTranslation(stringId: string, translation: string, systemId?: string, languageCode?: string) {
@@ -419,8 +336,13 @@ export const useTranslationStore = defineStore("translation", {
       this.translations = [];
       this.isLoaded = false;
       this.currentSystemId = null;
+      this.translationSource = null;
       this.totalStrings = 0;
       this.translatedCount = 0;
+      
+      // Clear global variables as well
+      globalThis.strings = {};
+      globalThis.translations = [];
     },
 
     // Backend configuration
@@ -428,16 +350,31 @@ export const useTranslationStore = defineStore("translation", {
       this.backend = backend;
     },
 
-    configureHttpBackend(baseUrl: string, apiKey?: string) {
-      this.backend = new HttpBackend(baseUrl, apiKey);
+    getCurrentTranslationSource() {
+      return this.translationSource;
     },
 
-    // Sync translations from backend
-    async syncFromBackend(systemId: string, languageCode: string): Promise<void> {
+    // Sync translations from file
+    async syncFromFile(file: File, systemId: string, languageCode: string, strategy: 'server-wins' | 'client-wins' | 'ask-user' = 'ask-user'): Promise<{ conflicts: Array<{ key: string, original: string, local: string, server: string }> }> {
+      const fileBackend = new FileBackend(file);
+      const backendTranslations = await fileBackend.sync(systemId, languageCode);
+
+      return await this.syncTranslations(backendTranslations, systemId, languageCode, strategy);
+    },
+
+    // Sync translations from backend with conflict detection
+    async syncFromBackend(systemId: string, languageCode: string, strategy: 'server-wins' | 'client-wins' | 'ask-user' = 'ask-user'): Promise<{ conflicts: Array<{ key: string, original: string, local: string, server: string }> }> {
       if (!this.backend.isAvailable()) {
         throw new Error('No backend configured');
       }
 
+      const backendTranslations = await this.backend.sync(systemId, languageCode);
+
+      return await this.syncTranslations(backendTranslations, systemId, languageCode, strategy);
+    },
+
+    // Core sync logic that handles conflicts and updates
+    async syncTranslations(backendTranslations: TranslationString[], systemId: string, languageCode: string, strategy: 'server-wins' | 'client-wins' | 'ask-user' = 'ask-user'): Promise<{ conflicts: Array<{ key: string, original: string, local: string, server: string }> }> {
       if (this.isSyncing) {
         throw new Error('Sync already in progress');
       }
@@ -445,46 +382,112 @@ export const useTranslationStore = defineStore("translation", {
       this.isSyncing = true;
 
       try {
-        const backendTranslations = await this.backend.sync(systemId, languageCode);
-
-        if (backendTranslations.length > 0) {
-          // Apply backend translations to current state
-          const translationMap = new Map(this.translations.map(t => [t.key, t]));
-
-          backendTranslations.forEach((backendTranslation) => {
-            const current = translationMap.get(backendTranslation.key);
-            if (current) {
-              current.translation = backendTranslation.translation;
-              current.translated = backendTranslation.translated;
-              current.modified = false; // Mark as unmodified since it came from backend
-            }
-          });
-
-          // Update catalogues to match
-          const keyMap = new Map(this.translations.map(t => [t.key, t]));
-
-          this.catalogues.forEach(catalogue => {
-            catalogue.strings.forEach(string => {
-              const translation = keyMap.get(string.key);
-              if (translation) {
-                string.translation = translation.translation;
-                string.translated = translation.translated;
-                string.modified = translation.modified;
-              }
-            });
-          });
-
-          // Update counts
-          this.translatedCount = this.translations.filter(s => s.translated).length;
-
-          // Save to local storage
-          await this.saveTranslationsToLocal(systemId, languageCode);
+        if (backendTranslations.length === 0) {
+          this.lastSyncTime = Date.now();
+          return { conflicts: [] };
         }
 
+        const translationMap = new Map(this.translations.map(t => [t.key, t]));
+        const conflicts: Array<{ key: string, original: string, local: string, server: string }> = [];
+        const safeUpdates: Array<{ local: TranslationString, server: TranslationString }> = [];
+
+        // Detect conflicts and safe updates
+        backendTranslations.forEach((serverTranslation) => {
+          const local = translationMap.get(serverTranslation.key);
+
+          if (!local) return;
+
+          // Check for conflicts: both local and server have changes
+          if (local.modified &&
+            local.translation !== serverTranslation.translation &&
+            local.translation.trim() !== '' &&
+            serverTranslation.translation.trim() !== '') {
+            conflicts.push({
+              key: serverTranslation.key,
+              original: local.original,
+              local: local.translation,
+              server: serverTranslation.translation
+            });
+          } else {
+            // Safe to update
+            safeUpdates.push({ local, server: serverTranslation });
+          }
+        });
+
+        // Apply safe updates immediately
+        safeUpdates.forEach(({ local, server }) => {
+          local.translation = server.translation;
+          local.translated = server.translated;
+          local.modified = false;
+        });
+
+        // Handle conflicts based on strategy
+        if (conflicts.length > 0) {
+          if (strategy === 'server-wins') {
+            conflicts.forEach(conflict => {
+              const local = translationMap.get(conflict.key);
+              if (local) {
+                local.translation = conflict.server;
+                local.translated = true;
+                local.modified = false;
+              }
+            });
+          } else if (strategy === 'client-wins') {
+            // Keep local changes, do nothing
+          } else if (strategy === 'ask-user') {
+            // Return conflicts for user to resolve
+            return { conflicts };
+          }
+        }
+
+        // Update catalogues to match
+        this.updateCataloguesFromTranslations();
+
+        // Update counts
+        this.translatedCount = this.translations.filter(s => s.translated).length;
+
+        // Save to local storage
+        await this.saveTranslationsToLocal(systemId, languageCode);
+
         this.lastSyncTime = Date.now();
+        return { conflicts: strategy === 'ask-user' ? conflicts : [] };
       } finally {
         this.isSyncing = false;
       }
+    },
+
+    // Helper method to update catalogues from translations
+    updateCataloguesFromTranslations() {
+      const keyMap = new Map(this.translations.map(t => [t.key, t]));
+
+      this.catalogues.forEach(catalogue => {
+        catalogue.strings.forEach(string => {
+          const translation = keyMap.get(string.key);
+          if (translation) {
+            string.translation = translation.translation;
+            string.translated = translation.translated;
+            string.modified = translation.modified;
+          }
+        });
+      });
+    },
+
+    // Resolve conflicts with user choices
+    resolveConflicts(conflicts: Array<{ key: string, choice: 'local' | 'server', server: string }>) {
+      const translationMap = new Map(this.translations.map(t => [t.key, t]));
+
+      conflicts.forEach(conflict => {
+        const local = translationMap.get(conflict.key);
+        if (local && conflict.choice === 'server') {
+          local.translation = conflict.server;
+          local.translated = true;
+          local.modified = false;
+        }
+        // If choice is 'local', keep current local translation
+      });
+
+      this.updateCataloguesFromTranslations();
+      this.translatedCount = this.translations.filter(s => s.translated).length;
     },
 
     // Submit translations to backend
