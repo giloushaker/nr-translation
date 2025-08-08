@@ -287,8 +287,8 @@ const toggleTranslationStatus = (string: any) => {
   display: grid;
   grid-template-columns: 1fr 1fr 80px 60px;
   border-bottom: 1px solid #f0f0f0;
-  min-height: 60px;
-  align-items: stretch;
+  min-height: 40px;
+  align-items: center;
   transition: background-color 0.2s;
 }
 
@@ -318,20 +318,20 @@ const toggleTranslationStatus = (string: any) => {
 
 .col-original,
 .col-translation {
-  padding: 0.5rem 0.75rem;
+  padding: 0.375rem 0.75rem;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .col-status {
-  padding: 0.5rem 0.75rem;
+  padding: 0.375rem 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .col-actions {
-  padding: 0.5rem 0.75rem;
+  padding: 0.375rem 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -406,7 +406,7 @@ const toggleTranslationStatus = (string: any) => {
 
 .translation-input {
   width: 100%;
-  padding: 0.75rem;
+  padding: 0.5rem;
   border: 1px solid #dee2e6;
   border-radius: 4px;
   font-family: inherit;
@@ -414,7 +414,7 @@ const toggleTranslationStatus = (string: any) => {
   line-height: 1.4;
   transition: border-color 0.2s, box-shadow 0.2s;
   resize: vertical;
-  min-height: 60px;
+  min-height: 36px;
 }
 
 .translation-input:focus {

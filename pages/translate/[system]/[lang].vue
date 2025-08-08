@@ -64,17 +64,17 @@ const initializeTranslationPage = async () => {
       // Load translation data - this handles both NewRecruit and BSData systems
       await loadTranslationData(updateProgress);
 
-      // Auto-sync from backend if available
-      if (translationStore.canSync) {
-        updateProgress(95, "Syncing from backend...");
-        try {
-          await translationStore.syncFromBackend(systemId, languageCode, "client-wins");
-          console.log("Auto-sync completed successfully");
-        } catch (error) {
-          console.warn("Auto-sync failed:", error);
-          // Don't show error to user for auto-sync, it's not critical
-        }
-      }
+      // Auto-sync from backend if available - DISABLED
+      // if (translationStore.canSync) {
+      //   updateProgress(95, "Syncing from backend...");
+      //   try {
+      //     await translationStore.syncFromBackend(systemId, languageCode, "client-wins");
+      //     console.log("Auto-sync completed successfully");
+      //   } catch (error) {
+      //     console.warn("Auto-sync failed:", error);
+      //     // Don't show error to user for auto-sync, it's not critical
+      //   }
+      // }
 
       // Small delay to show completion
       await new Promise((resolve) => setTimeout(resolve, 300));

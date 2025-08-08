@@ -1,10 +1,34 @@
 <template>
   <div class="container">
+    <!-- Sync Dialog -->
+    <SyncDialog
+      :show="showSyncDialog"
+      :sync-conflicts="syncConflicts"
+      :selected-file="selectedFile"
+      :is-syncing="isSyncing"
+      :can-sync="hasBackend"
+      :sync-summary="syncSummary"
+      @close="closeSyncDialog"
+      @file-select="handleFileSelect"
+      @sync="handleSyncSubmit"
+      @resolve-conflicts="handleConflictResolution"
+    />
+
     <div class="header">
       <button @click="goBack" class="back-button">← Back to Languages</button>
       <h1>Select Catalogue to Translate</h1>
       <div class="header-stats">
         <span>{{ translatedCount }}/{{ totalStrings }} total translated</span>
+      </div>
+      <div class="header-actions">
+        <button
+          @click="showSyncDialog = true"
+          class="sync-button"
+          :disabled="isSyncing"
+          :title="hasBackend ? 'Sync translations from backend' : 'Import translations from file'"
+        >
+          {{ isSyncing ? 'Syncing...' : 'Sync Translations' }}
+        </button>
       </div>
     </div>
 
@@ -54,18 +78,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTranslationStore } from "~/stores/translationStore";
+import SyncDialog from "~/components/SyncDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
 const translationStore = useTranslationStore();
 
+// Sync dialog states
+const showSyncDialog = ref(false);
+const syncConflicts = ref<Array<{ key: string; original: string; local: string; server: string }>>([]);
+const selectedFile = ref<File | null>(null);
+const syncSummary = ref<{ received: number; uploaded: number; conflicts: number } | null>(null);
+const serverTranslationsFromSync = ref<Set<string>>(new Set());
+
 // Computed properties from store
 const catalogues = computed(() => translationStore.catalogues);
 const totalStrings = computed(() => translationStore.totalStrings);
 const translatedCount = computed(() => translationStore.translatedCount);
+
+// Backend computed properties
+const canSync = computed(() => translationStore.canSync || false);
+const isSyncing = computed(() => translationStore.isSyncing);
+const hasBackend = computed(() => translationStore.backend?.isAvailable() || false);
 
 // Get language info from route
 const languageCode = computed(() => route.params.lang as string);
@@ -115,6 +152,134 @@ const getCatalogueType = (name: string): string => {
   if (name.includes("Rule")) return "Rules";
   return "Catalogue";
 };
+
+// Sync functionality
+const handleFileSelect = (file: File) => {
+  selectedFile.value = file;
+};
+
+const closeSyncDialog = () => {
+  showSyncDialog.value = false;
+  selectedFile.value = null;
+  syncConflicts.value = [];
+  syncSummary.value = null;
+  serverTranslationsFromSync.value = new Set();
+};
+
+const handleSyncSubmit = async (data: {
+  syncStrategy: "server-wins" | "client-wins" | "ask-user";
+  selectedFile: File | null;
+}) => {
+  try {
+    let result;
+
+    if (data.selectedFile) {
+      // Use file-based sync
+      result = await translationStore.syncFromFile(
+        data.selectedFile,
+        route.params.system as string,
+        languageCode.value,
+        data.syncStrategy
+      );
+    } else {
+      // Use backend sync
+      result = await translationStore.syncFromBackend(
+        route.params.system as string,
+        languageCode.value,
+        data.syncStrategy
+      );
+    }
+
+    if (result.conflicts.length > 0 && data.syncStrategy === "ask-user") {
+      syncConflicts.value = result.conflicts;
+      // Store server translations for proper upload logic during conflict resolution
+      if (result.serverTranslations) {
+        serverTranslationsFromSync.value = new Set(result.serverTranslations.map(t => t.key));
+      }
+      // Keep dialog open to show conflicts
+      return;
+    }
+
+    // Clear conflicts and file selection
+    syncConflicts.value = [];
+    selectedFile.value = null;
+
+    // Show summary instead of closing dialog
+    syncSummary.value = {
+      received: result.received || 0,
+      uploaded: result.uploaded || 0,
+      conflicts: result.resolvedConflicts || 0
+    };
+
+    // Don't close dialog - show summary instead
+    // showSyncDialog.value = false;
+    
+  } catch (error: any) {
+    console.error("Failed to sync translations:", error);
+    
+    // Show user notification for errors
+    if (globalThis.notify) {
+      globalThis.notify({
+        title: 'Sync Failed',
+        text: error.message || 'Unknown error occurred',
+        type: 'error',
+        duration: 5000
+      });
+    } else {
+      alert("Failed to sync translations: " + error.message);
+    }
+  }
+};
+
+const handleConflictResolution = async (resolutions: Array<{ key: string; choice: 'local' | 'server'; server: string }>) => {
+  try {
+    // Apply the conflict resolutions
+    translationStore.resolveConflicts(resolutions);
+    
+    // Complete the sync process by saving and uploading
+    await translationStore.saveTranslationsToLocal(
+      route.params.system as string, 
+      languageCode.value
+    );
+    
+    // Upload any remaining local changes
+    // Use the complete server translation set from the initial sync, not just conflicted keys
+    await translationStore.uploadLocalTranslationsToServer(
+      route.params.system as string,
+      languageCode.value,
+      serverTranslationsFromSync.value
+    );
+    
+    // Clear conflicts and show summary
+    const resolvedCount = resolutions.length;
+    const uploadedCount = translationStore.getLastUploadCount();
+    
+    syncConflicts.value = [];
+    selectedFile.value = null;
+    serverTranslationsFromSync.value = new Set();
+    
+    // Show completion summary
+    syncSummary.value = {
+      received: resolvedCount,
+      uploaded: uploadedCount,
+      conflicts: resolvedCount
+    };
+    
+  } catch (error: any) {
+    console.error("Failed to resolve conflicts:", error);
+    
+    if (globalThis.notify) {
+      globalThis.notify({
+        title: 'Conflict Resolution Failed',
+        text: error.message || 'Unknown error occurred',
+        type: 'error',
+        duration: 5000
+      });
+    } else {
+      alert("Failed to resolve conflicts: " + error.message);
+    }
+  }
+};
 </script>
 
 <style scoped>
@@ -159,6 +324,36 @@ const getCatalogueType = (name: string): string => {
   color: #666;
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+.header-actions {
+  margin-left: auto;
+}
+
+.sync-button {
+  padding: 0.5rem 1rem;
+  background: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.sync-button:hover:not(:disabled) {
+  background: #138496;
+}
+
+.sync-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sync-button:disabled:hover {
+  background: #6c757d;
+  transform: none;
 }
 
 .catalogues-grid {

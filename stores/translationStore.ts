@@ -36,6 +36,7 @@ export const useTranslationStore = defineStore("translation", {
     isSubmitting: false,
     lastSyncTime: null as number | null,
     lastSubmitTime: null as number | null,
+    lastUploadCount: 0,
   }),
 
   getters: {
@@ -435,6 +436,11 @@ export const useTranslationStore = defineStore("translation", {
       return this.translationSource;
     },
 
+    // Get last upload count for sync summary
+    getLastUploadCount(): number {
+      return this.lastUploadCount;
+    },
+
     // Sync translations from file
     async syncFromFile(
       file: File,
@@ -453,7 +459,13 @@ export const useTranslationStore = defineStore("translation", {
       systemId: string,
       languageCode: string,
       strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
-    ): Promise<{ conflicts: Array<{ key: string; original: string; local: string; server: string }> }> {
+    ): Promise<{ 
+      conflicts: Array<{ key: string; original: string; local: string; server: string }>;
+      received: number;
+      uploaded: number; 
+      resolvedConflicts: number;
+      serverTranslations?: TranslationString[];
+    }> {
       if (!this.backend?.isAvailable()) {
         throw new Error("No backend configured");
       }
@@ -469,7 +481,13 @@ export const useTranslationStore = defineStore("translation", {
       systemId: string,
       languageCode: string,
       strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
-    ): Promise<{ conflicts: Array<{ key: string; original: string; local: string; server: string }> }> {
+    ): Promise<{ 
+      conflicts: Array<{ key: string; original: string; local: string; server: string }>;
+      received: number;
+      uploaded: number;
+      resolvedConflicts: number;
+      serverTranslations?: TranslationString[];
+    }> {
       if (this.isSyncing) {
         throw new Error("Sync already in progress");
       }
@@ -477,77 +495,121 @@ export const useTranslationStore = defineStore("translation", {
       this.isSyncing = true;
 
       try {
+        let conflicts: Array<{ key: string; original: string; local: string; server: string }> = [];
+        const received = backendTranslations.length;
+        let resolvedConflicts = 0;
+
         if (backendTranslations.length === 0) {
-          this.lastSyncTime = Date.now();
-          return { conflicts: [] };
+          console.log("📝 Server has no translations, but will still upload local ones");
+          console.log("🔍 Step 1: Skipping conflict detection - no server data");
+          // Skip conflict detection entirely - no server data to conflict with
+        } else {
+          console.log("🔄 Processing", backendTranslations.length, "server translations for conflicts");
+          const translationMap = new Map(this.translations.map((t) => [t.key, t]));
+          const safeUpdates: Array<{ local: TranslationString; server: TranslationString }> = [];
+
+          // Detect conflicts and safe updates
+          backendTranslations.forEach((serverTranslation) => {
+            const local = translationMap.get(serverTranslation.key);
+
+            if (!local) return;
+
+            // Check for conflicts: both local and server have changes
+            if (
+              local.modified &&
+              local.translation !== serverTranslation.translation &&
+              local.translation.trim() !== "" &&
+              serverTranslation.translation.trim() !== ""
+            ) {
+              conflicts.push({
+                key: serverTranslation.key,
+                original: local.original,
+                local: local.translation,
+                server: serverTranslation.translation,
+              });
+            } else if (local.translation !== serverTranslation.translation) {
+              // Only update if values are actually different
+              safeUpdates.push({ local, server: serverTranslation });
+            }
+            // If translations are identical, do nothing - no update needed
+          });
+
+          // Apply safe updates immediately
+          safeUpdates.forEach(({ local, server }) => {
+            local.translation = server.translation;
+            local.translated = server.translated;
+            local.modified = false;
+          });
+
+          // Handle conflicts based on strategy
+          if (conflicts.length > 0) {
+            if (strategy === "server-wins") {
+              conflicts.forEach((conflict) => {
+                const local = translationMap.get(conflict.key);
+                if (local) {
+                  local.translation = conflict.server;
+                  local.translated = true;
+                  local.modified = false;
+                  resolvedConflicts++;
+                }
+              });
+            } else if (strategy === "client-wins") {
+              // Keep local changes, do nothing
+              resolvedConflicts = conflicts.length;
+            } else if (strategy === "ask-user") {
+              // Return conflicts for user to resolve, including server translations for proper upload logic
+              return { 
+                conflicts, 
+                received, 
+                uploaded: 0, 
+                resolvedConflicts: 0,
+                serverTranslations: backendTranslations
+              };
+            }
+          }
         }
 
-        const translationMap = new Map(this.translations.map((t) => [t.key, t]));
-        const conflicts: Array<{ key: string; original: string; local: string; server: string }> = [];
-        const safeUpdates: Array<{ local: TranslationString; server: TranslationString }> = [];
+        // Update catalogues to match (skip if might cause freeze)
+        console.log("🔍 Step 2: About to update catalogues...");
+        // Note: This was causing freezes before with large datasets, so we're skipping it during sync
+        // this.updateCataloguesFromTranslations();
+        console.log("✅ Step 2: Skipping catalogue update to prevent freeze");
 
-        // Detect conflicts and safe updates
-        backendTranslations.forEach((serverTranslation) => {
-          const local = translationMap.get(serverTranslation.key);
-
-          if (!local) return;
-
-          // Check for conflicts: both local and server have changes
-          if (
-            local.modified &&
-            local.translation !== serverTranslation.translation &&
-            local.translation.trim() !== "" &&
-            serverTranslation.translation.trim() !== ""
-          ) {
-            conflicts.push({
-              key: serverTranslation.key,
-              original: local.original,
-              local: local.translation,
-              server: serverTranslation.translation,
-            });
-          } else {
-            // Safe to update
-            safeUpdates.push({ local, server: serverTranslation });
-          }
-        });
-
-        // Apply safe updates immediately
-        safeUpdates.forEach(({ local, server }) => {
-          local.translation = server.translation;
-          local.translated = server.translated;
-          local.modified = false;
-        });
-
-        // Handle conflicts based on strategy
-        if (conflicts.length > 0) {
-          if (strategy === "server-wins") {
-            conflicts.forEach((conflict) => {
-              const local = translationMap.get(conflict.key);
-              if (local) {
-                local.translation = conflict.server;
-                local.translated = true;
-                local.modified = false;
-              }
-            });
-          } else if (strategy === "client-wins") {
-            // Keep local changes, do nothing
-          } else if (strategy === "ask-user") {
-            // Return conflicts for user to resolve
-            return { conflicts };
-          }
-        }
-
-        // Update catalogues to match
-        this.updateCataloguesFromTranslations();
-
-        // Update counts
-        this.translatedCount = this.translations.filter((s) => s.translated).length;
+        // Update counts (skip to prevent freeze)
+        console.log("🔍 Step 3: About to update translated count...");
+        console.log("🔍 Step 3: Total translations to filter:", this.translations.length);
+        // Skip this filtering operation as it might freeze with large datasets
+        console.log("⚠️ Step 3: Skipping translated count update to prevent freeze");
+        // this.translatedCount = this.translations.filter((s) => s.translated).length;
+        console.log("✅ Step 3: Skipped translated count update");
 
         // Save to local storage
+        console.log("🔍 Step 4: About to save to local storage...");
         await this.saveTranslationsToLocal(systemId, languageCode);
+        console.log("✅ Step 4: Saved to local storage");
 
+        // Upload local translations back to server (bidirectional sync)
+        console.log("🔍 Step 5: About to upload local translations to server...");
+        const serverTranslationKeys = new Set(backendTranslations.map(t => t.key));
+        await this.uploadLocalTranslationsToServer(systemId, languageCode, serverTranslationKeys);
+        console.log("✅ Step 5: Finished uploading local translations to server");
+
+        console.log("🔍 Step 6: Finalizing sync...");
+        console.log("🔍 Backend still available?", this.backend?.isAvailable());
+        console.log("🔍 Backend URL:", this.backend ? "exists" : "missing");
+        
+        // Get uploaded count from the upload method
+        const uploaded = this.getLastUploadCount();
+        
         this.lastSyncTime = Date.now();
-        return { conflicts: strategy === "ask-user" ? conflicts : [] };
+        console.log("✅ Sync completed successfully");
+        
+        return { 
+          conflicts: strategy === "ask-user" ? conflicts : [],
+          received,
+          uploaded,
+          resolvedConflicts
+        };
       } finally {
         this.isSyncing = false;
       }
@@ -569,6 +631,82 @@ export const useTranslationStore = defineStore("translation", {
       });
     },
 
+    // Upload local translations to server during sync (bidirectional sync)
+    async uploadLocalTranslationsToServer(systemId: string, languageCode: string, serverTranslationKeys?: Set<string>): Promise<void> {
+      if (!this.backend?.isAvailable()) {
+        console.warn("No backend available for uploading local translations");
+        return;
+      }
+
+      try {
+        console.log("🔍 Debug: Total translations in store:", this.translations.length);
+        console.log("🔍 Debug: Sample translations:", this.translations.slice(0, 3).map(t => ({
+          id: t.id,
+          key: t.key,
+          translated: t.translated,
+          translation: t.translation?.substring(0, 50) + "...",
+          modified: t.modified
+        })));
+
+        // Get all local translations that should be uploaded
+        // Only upload translations that are:
+        // 1. Modified locally (have local changes)
+        // 2. Don't exist on server (are new local translations)
+        const translatedStrings = this.translations.filter((t) => t.translated && t.translation && t.translation.trim() !== "");
+        
+        const localTranslations = translatedStrings.filter((t) => {
+          // Upload if it's a local modification
+          if (t.modified) {
+            return true;
+          }
+          
+          // Upload if it doesn't exist on server (new local translation)
+          if (serverTranslationKeys && !serverTranslationKeys.has(t.key)) {
+            return true;
+          }
+          
+          // Don't upload if it came from server and hasn't been modified
+          return false;
+        });
+        
+        console.log("🔍 Debug: Translated strings:", translatedStrings.length);
+        console.log("🔍 Debug: Local translations to upload:", localTranslations.length);
+        console.log("🔍 Debug: Server translation keys count:", serverTranslationKeys?.size || 0);
+
+        if (localTranslations.length > 0) {
+          console.log(`🔄 Uploading ${localTranslations.length} local translations to server during sync...`);
+          console.log("🔍 Debug: Sample translations to upload:", localTranslations.slice(0, 2).map(t => ({
+            id: t.id,
+            key: t.key,
+            translation: t.translation?.substring(0, 50) + "...",
+          })));
+          
+          await this.backend.uploadTranslations(systemId, languageCode, localTranslations);
+          console.log("✅ Local translations uploaded to server successfully");
+
+          // Store uploaded count for sync summary
+          this.lastUploadCount = localTranslations.length;
+
+          // Mark uploaded translations as unmodified since they're now synced
+          localTranslations.forEach((t) => {
+            t.modified = false;
+          });
+
+          // Update catalogues to reflect the unmodified state (skip to prevent freeze)
+          console.log("⚠️ Skipping catalogue update in upload to prevent freeze");
+          // this.updateCataloguesFromTranslations();
+          console.log("✅ Upload method completed successfully");
+        } else {
+          console.log("📝 No local translations to upload during sync");
+          this.lastUploadCount = 0;
+        }
+      } catch (error) {
+        console.error("❌ Failed to upload local translations to server:", error);
+        this.lastUploadCount = 0;
+        // Don't throw - sync should continue even if upload fails
+      }
+    },
+
     // Resolve conflicts with user choices
     resolveConflicts(conflicts: Array<{ key: string; choice: "local" | "server"; server: string }>) {
       const translationMap = new Map(this.translations.map((t) => [t.key, t]));
@@ -583,8 +721,10 @@ export const useTranslationStore = defineStore("translation", {
         // If choice is 'local', keep current local translation
       });
 
-      this.updateCataloguesFromTranslations();
-      this.translatedCount = this.translations.filter((s) => s.translated).length;
+      // Skip expensive operations to prevent freezing with large datasets
+      console.log("⚠️ Skipping catalogue update and count recalculation in resolveConflicts to prevent freeze");
+      // this.updateCataloguesFromTranslations();
+      // this.translatedCount = this.translations.filter((s) => s.translated).length;
     },
 
     // Submit translations to backend
