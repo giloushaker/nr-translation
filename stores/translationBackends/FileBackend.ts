@@ -3,24 +3,24 @@ import type { TranslationBackend } from "./index";
 
 // File-based backend implementation
 export class FileBackend implements TranslationBackend {
-  constructor(private file: File) { }
+  constructor(private file: File) {}
 
   async fetchTranslations(systemId: string, languageCode: string): Promise<TranslationString[]> {
     const text = await this.file.text();
 
     try {
       // Try parsing as JSON first
-      if (this.file.name.endsWith('.json')) {
+      if (this.file.name.endsWith(".json")) {
         return this.parseJsonFile(text);
-      } else if (this.file.name.endsWith('.po')) {
+      } else if (this.file.name.endsWith(".po")) {
         return this.parsePoFile(text);
-      } else if (this.file.name.endsWith('.csv')) {
+      } else if (this.file.name.endsWith(".csv")) {
         return this.parseCsvFile(text);
       } else {
         // Try to auto-detect format
         return this.parseJsonFile(text);
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Failed to parse file: ${error.message}`);
     }
   }
@@ -31,44 +31,44 @@ export class FileBackend implements TranslationBackend {
     if (data.translations && Array.isArray(data.translations)) {
       // Full JSON format
       return data.translations;
-    } else if (typeof data === 'object') {
+    } else if (typeof data === "object") {
       // Key-value JSON format
       return Object.entries(data).map(([key, translation]) => ({
-        id: '',
+        id: "",
         key,
         original: key,
         translation: translation as string,
         translated: true,
-        catalogue: 'imported',
-        modified: false
+        catalogue: "imported",
+        modified: false,
       }));
     }
 
-    throw new Error('Unrecognized JSON format');
+    throw new Error("Unrecognized JSON format");
   }
 
   private parsePoFile(text: string): TranslationString[] {
     const translations: TranslationString[] = [];
-    const lines = text.split('\n');
+    const lines = text.split("\n");
     let currentEntry: any = {};
 
     for (const line of lines) {
       const trimmed = line.trim();
 
-      if (trimmed.startsWith('msgid ')) {
+      if (trimmed.startsWith("msgid ")) {
         if (currentEntry.msgid && currentEntry.msgstr) {
           translations.push({
-            id: '',
+            id: "",
             key: currentEntry.msgid,
             original: currentEntry.msgid,
             translation: currentEntry.msgstr,
             translated: !!currentEntry.msgstr,
-            catalogue: 'imported',
-            modified: false
+            catalogue: "imported",
+            modified: false,
           });
         }
         currentEntry = { msgid: trimmed.slice(7, -1) };
-      } else if (trimmed.startsWith('msgstr ')) {
+      } else if (trimmed.startsWith("msgstr ")) {
         currentEntry.msgstr = trimmed.slice(8, -1);
       }
     }
@@ -76,13 +76,13 @@ export class FileBackend implements TranslationBackend {
     // Add last entry
     if (currentEntry.msgid && currentEntry.msgstr) {
       translations.push({
-        id: '',
+        id: "",
         key: currentEntry.msgid,
         original: currentEntry.msgid,
         translation: currentEntry.msgstr,
         translated: !!currentEntry.msgstr,
-        catalogue: 'imported',
-        modified: false
+        catalogue: "imported",
+        modified: false,
       });
     }
 
@@ -90,11 +90,11 @@ export class FileBackend implements TranslationBackend {
   }
 
   private parseCsvFile(text: string): TranslationString[] {
-    const lines = text.split('\n');
+    const lines = text.split("\n");
     const translations: TranslationString[] = [];
 
     // Skip header if present
-    const startIndex = lines[0]?.includes('Original') ? 1 : 0;
+    const startIndex = lines[0]?.includes("Original") ? 1 : 0;
 
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i]?.trim();
@@ -103,13 +103,13 @@ export class FileBackend implements TranslationBackend {
       const columns = this.parseCsvLine(line);
       if (columns.length >= 2) {
         translations.push({
-          id: '',
+          id: "",
           key: columns[0]!,
           original: columns[0]!,
           translation: columns[1]!,
           translated: !!columns[1],
-          catalogue: columns[2] || 'imported',
-          modified: false
+          catalogue: columns[2] || "imported",
+          modified: false,
         });
       }
     }
@@ -119,7 +119,7 @@ export class FileBackend implements TranslationBackend {
 
   private parseCsvLine(line: string): string[] {
     const result: string[] = [];
-    let current = '';
+    let current = "";
     let inQuotes = false;
 
     for (let i = 0; i < line.length; i++) {
@@ -132,9 +132,9 @@ export class FileBackend implements TranslationBackend {
         } else {
           inQuotes = !inQuotes;
         }
-      } else if (char === ',' && !inQuotes) {
+      } else if (char === "," && !inQuotes) {
         result.push(current);
-        current = '';
+        current = "";
       } else {
         current += char;
       }
@@ -145,7 +145,7 @@ export class FileBackend implements TranslationBackend {
   }
 
   async uploadTranslations(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
-    throw new Error('File backend does not support uploading');
+    throw new Error("File backend does not support uploading");
   }
 
   isAvailable(): boolean {

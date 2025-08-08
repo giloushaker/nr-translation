@@ -5,17 +5,20 @@ import type { TranslationSource } from "./index";
 export class BSDataTranslationSource implements TranslationSource {
   private system: any;
 
-  constructor(private systemId: string) { }
+  constructor(private systemId: string) {}
 
   getId(): string {
-    return `bs-${this.systemId}`;
+    return `${this.systemId}`;
   }
 
   getName(): string {
     return `${this.systemId}`;
   }
 
-  async getTranslations(languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<{
+  async getTranslations(
+    languageCode: string,
+    progressCallback?: (progress: number, message?: string) => void
+  ): Promise<{
     strings: Record<string, Set<string>>;
     catalogues: TranslationCatalogue[];
     translations: TranslationString[];
@@ -29,7 +32,7 @@ export class BSDataTranslationSource implements TranslationSource {
     const { extractStrings } = await import("~/assets/ts/bs_translate");
 
     // Extract translations from the system
-    const rawStrings = extractStrings(this.system, progressCallback || (() => { }));
+    const rawStrings = extractStrings(this.system, progressCallback || (() => {}));
 
     // Process translations into catalogues
     const catalogueList: TranslationCatalogue[] = [];
@@ -63,12 +66,12 @@ export class BSDataTranslationSource implements TranslationSource {
     return {
       strings: rawStrings,
       catalogues: catalogueList,
-      translations: allTranslations
+      translations: allTranslations,
     };
   }
 
   private async loadSystem(progressCallback?: (progress: number, message?: string) => void): Promise<void> {
-    const progress = progressCallback || (() => { });
+    const progress = progressCallback || (() => {});
 
     try {
       // Check if it's a GitHub repo (contains /)
@@ -95,7 +98,7 @@ export class BSDataTranslationSource implements TranslationSource {
     const gameSystem = new GameSystemFiles();
 
     progress(20, "Downloading repository files...");
-    const zipEntries = await getRepoZip(owner, repo);
+    const zipEntries = await getRepoZip(owner || "", repo || "");
 
     progress(40, "Processing game system files...");
 
@@ -114,10 +117,7 @@ export class BSDataTranslationSource implements TranslationSource {
 
       if (data.gameSystem) {
         await gameSystem.setSystem(data);
-        progress(
-          40 + Math.floor((processedFiles / totalFiles) * 50),
-          `Loading ${data.gameSystem.name}...`
-        );
+        progress(40 + Math.floor((processedFiles / totalFiles) * 50), `Loading ${data.gameSystem.name}...`);
       } else if (data.catalogue) {
         await gameSystem.setCatalogue(data);
       }

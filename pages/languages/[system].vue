@@ -113,9 +113,82 @@ const generateDefaultLanguages = (): Language[] => {
   }));
 };
 
-// Helper function to generate language data from backend stats or defaults
+// Helper function to get total string count (cached)
+let cachedSystemStringCount: number | null = null;
+const getSystemStringCount = async (systemId: string): Promise<number> => {
+  if (cachedSystemStringCount !== null) {
+    return cachedSystemStringCount;
+  }
+  
+  try {
+    // Check if translation store already has the data loaded
+    if (translationStore.isLoaded && translationStore.currentSystemId?.includes(systemId)) {
+      cachedSystemStringCount = translationStore.totalStrings;
+      return cachedSystemStringCount;
+    }
+    
+    // If not loaded, just return 0 for now - stats will update when system is loaded
+    return 0;
+  } catch (error) {
+    console.warn("Failed to get system string count:", error);
+    return 0;
+  }
+};
+
+// Helper function to calculate local stats from IndexedDB (fast version)
+const calculateLocalStats = async (systemId: string, languageCode: string): Promise<{ total: number; translated: number; reviewed: number }> => {
+  try {
+    const translationSources = await import("~/stores/translationSources");
+    const source = translationSources.createTranslationSourceForSystem(systemId);
+    const sourceId = source.getId();
+    
+    // Get total strings (fast - from cache if available)
+    const totalStrings = await getSystemStringCount(systemId);
+    
+    // Get local translations from IndexedDB
+    const systemLanguageKey = `${sourceId}-${languageCode}`;
+    const db = await translationStore.dbOpen();
+    const transaction = db.transaction(['translations'], 'readonly');
+    const store = transaction.objectStore('translations');
+    const index = store.index('systemLanguage');
+    
+    const savedTranslations = await new Promise<any[]>((resolve, reject) => {
+      const results: any[] = [];
+      const request = index.openCursor(IDBKeyRange.only(systemLanguageKey));
+      
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      
+      request.onerror = () => reject(request.error);
+    });
+    
+    const translatedStrings = savedTranslations.length;
+    const reviewedStrings = 0; // We don't track reviewed status yet
+    
+    return {
+      total: totalStrings,
+      translated: translatedStrings,
+      reviewed: reviewedStrings
+    };
+    
+  } catch (error) {
+    console.warn("Failed to calculate local stats:", error);
+    return { total: 0, translated: 0, reviewed: 0 };
+  }
+};
+
+// Helper function to generate language data from backend stats or local calculations
 const generateLanguageData = async (systemId: string, backendStats: any): Promise<Language[]> => {
-  return defaultLanguageCodes.map((lang) => {
+  const results = [];
+  
+  for (const lang of defaultLanguageCodes) {
     // Check if backend has stats for this language
     const langStats = backendStats?.languages?.[lang.code];
 
@@ -125,7 +198,7 @@ const generateLanguageData = async (systemId: string, backendStats: any): Promis
       const reviewedStrings = langStats.reviewed || 0;
       const untranslatedStrings = totalStrings - translatedStrings;
 
-      return {
+      results.push({
         code: lang.code,
         name: lang.name,
         translatedPercent: totalStrings > 0 ? Math.round((translatedStrings / totalStrings) * 100) : 0,
@@ -133,20 +206,28 @@ const generateLanguageData = async (systemId: string, backendStats: any): Promis
         totalStrings,
         translatedStrings,
         untranslatedStrings: Math.max(0, untranslatedStrings),
-      };
+      });
     } else {
-      // No backend stats, return zeros
-      return {
+      // No backend stats, calculate from local data (fast version)
+      const localStats = await calculateLocalStats(systemId, lang.code);
+      const totalStrings = localStats.total;
+      const translatedStrings = localStats.translated;
+      const reviewedStrings = localStats.reviewed;
+      const untranslatedStrings = Math.max(0, totalStrings - translatedStrings);
+
+      results.push({
         code: lang.code,
         name: lang.name,
-        translatedPercent: 0,
-        reviewedPercent: 0,
-        totalStrings: 0,
-        translatedStrings: 0,
-        untranslatedStrings: 0,
-      };
+        translatedPercent: totalStrings > 0 ? Math.round((translatedStrings / totalStrings) * 100) : 0,
+        reviewedPercent: totalStrings > 0 ? Math.round((reviewedStrings / totalStrings) * 100) : 0,
+        totalStrings,
+        translatedStrings,
+        untranslatedStrings,
+      });
     }
-  });
+  }
+  
+  return results;
 };
 
 const loadSystem = async (systemId: string) => {
@@ -164,7 +245,7 @@ const loadSystem = async (systemId: string) => {
 
       // Try to get stats from backend if available
       let backendStats = null;
-      if (translationStore.backend.isAvailable()) {
+      if (translationStore.backend?.isAvailable()) {
         try {
           console.log("Loading stats from backend for system:", systemId);
           backendStats = await translationStore.backend.getStats(systemId);

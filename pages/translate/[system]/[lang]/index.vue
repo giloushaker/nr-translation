@@ -1,6 +1,5 @@
 <template>
   <div class="container">
-
     <!-- Export Dialog -->
     <ExportDialog :show="showExportDialog" @close="showExportDialog = false" @export="handleExport" />
 
@@ -89,11 +88,16 @@
                 >
                   <span class="toggle-icon">{{ expandedCatalogues.has(catalogue.id) ? "▼" : "▶" }}</span>
                   <span class="catalogue-name">{{ catalogue.name }}</span>
-                  <span class="item-count">({{ catalogue.filteredStringCount }} of {{ catalogue.stringCount }} strings)</span>
+                  <span class="item-count"
+                    >({{ catalogue.filteredStringCount }} of {{ catalogue.stringCount }} strings)</span
+                  >
                 </button>
 
                 <!-- Strings Table -->
-                <div v-if="expandedCatalogues.has(catalogue.id) && catalogue.filteredStrings.length > 0" class="strings-table">
+                <div
+                  v-if="expandedCatalogues.has(catalogue.id) && catalogue.filteredStrings.length > 0"
+                  class="strings-table"
+                >
                   <div class="table-header">
                     <div class="col-original">Original Text</div>
                     <div class="col-translation">Translation</div>
@@ -155,13 +159,12 @@ const route = useRoute();
 const router = useRouter();
 const translationStore = useTranslationStore();
 
-
 // Hierarchy data
 const systemExpanded = ref(true);
 const expandedCatalogues = ref(new Set<string>());
 
 // Filter state
-const selectedFilter = ref<string>('all');
+const selectedFilter = ref<string>("all");
 const cachedFilteredCatalogues = ref<any[]>([]);
 const cachedFilteredCount = ref<number>(0);
 
@@ -182,13 +185,13 @@ const systemStringCount = computed(() => translationStore.systemStringCount);
 // Filter function
 const filterString = (string: any, filterType: string) => {
   switch (filterType) {
-    case 'translated':
+    case "translated":
       return string.translated;
-    case 'untranslated':
+    case "untranslated":
       return !string.translated;
-    case 'modified':
+    case "modified":
       return string.modified;
-    case 'untranslated-modified':
+    case "untranslated-modified":
       return !string.translated || string.modified;
     default:
       return true;
@@ -197,15 +200,17 @@ const filterString = (string: any, filterType: string) => {
 
 // Apply filter function
 const applyFilter = () => {
-  const filtered = catalogues.value.map(catalogue => {
-    const filteredStrings = catalogue.strings.filter(string => filterString(string, selectedFilter.value));
-    return {
-      ...catalogue,
-      filteredStrings,
-      filteredStringCount: filteredStrings.length
-    };
-  }).filter(catalogue => catalogue.filteredStringCount > 0);
-  
+  const filtered = catalogues.value
+    .map((catalogue) => {
+      const filteredStrings = catalogue.strings.filter((string) => filterString(string, selectedFilter.value));
+      return {
+        ...catalogue,
+        filteredStrings,
+        filteredStringCount: filteredStrings.length,
+      };
+    })
+    .filter((catalogue) => catalogue.filteredStringCount > 0);
+
   cachedFilteredCatalogues.value = filtered;
   cachedFilteredCount.value = filtered.reduce((total, catalogue) => total + catalogue.filteredStringCount, 0);
 };
@@ -217,7 +222,7 @@ const filteredCount = computed(() => cachedFilteredCount.value);
 // Backend computed properties
 const canSubmit = computed(() => translationStore.canSubmit);
 const isSubmitting = computed(() => translationStore.isSubmitting);
-const canSync = computed(() => translationStore.canSync);
+const canSync = computed(() => translationStore.canSync || false);
 const isSyncing = computed(() => translationStore.isSyncing);
 
 // Get language info from route
@@ -225,7 +230,7 @@ const languageCode = computed(() => route.params.lang as string);
 const languageName = computed(() => {
   const languageNames: Record<string, string> = {
     en: "English",
-    es: "Spanish", 
+    es: "Spanish",
     fr: "French",
     de: "German",
     it: "Italian",
@@ -320,7 +325,7 @@ const handleSyncSubmit = async (data: {
     // Show success message
     const message = data.selectedFile ? "Translations imported successfully" : "Translations synced successfully";
     console.log(message);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to sync translations:", error);
     alert("Failed to sync translations: " + error.message);
   }
@@ -334,7 +339,7 @@ const handleSubmit = async (data: { onlyModified: boolean }) => {
 
     // Show success message (you might want to add a toast/notification system)
     console.log("Translations submitted successfully");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to submit translations:", error);
     // Show error message to user
     alert("Failed to submit translations: " + error.message);
@@ -360,9 +365,13 @@ watch(selectedFilter, () => {
 });
 
 // Watch for data changes (when translations are loaded or updated)
-watch(catalogues, () => {
-  applyFilter();
-}, { deep: true });
+watch(
+  catalogues,
+  () => {
+    applyFilter();
+  },
+  { deep: true }
+);
 
 // Initialize filter on mount
 onMounted(() => {

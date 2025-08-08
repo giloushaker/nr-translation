@@ -30,7 +30,7 @@ export const useTranslationStore = defineStore("translation", {
     currentSystemId: null as string | null,
     totalStrings: 0,
     translatedCount: 0,
-    backend: new GithubBackend() as TranslationBackend,
+    backend: null as TranslationBackend | null,
     translationSource: null as TranslationSource | null,
     isSyncing: false,
     isSubmitting: false,
@@ -44,20 +44,20 @@ export const useTranslationStore = defineStore("translation", {
     systemName: (state) => state.translationSource?.getName() || "Unknown System",
 
     getCatalogueById: (state) => (catalogueId: string) => {
-      return state.catalogues.find(cat => cat.id === catalogueId);
+      return state.catalogues.find((cat) => cat.id === catalogueId);
     },
 
     getTranslationByKey: (state) => (key: string) => {
-      return state.translations.find(t => t.key === key);
+      return state.translations.find((t) => t.key === key);
     },
 
     getTranslationsByStatus: (state) => (translated: boolean) => {
-      return state.translations.filter(t => t.translated === translated);
+      return state.translations.filter((t) => t.translated === translated);
     },
 
-    canSync: (state) => state.backend.isAvailable() && !state.isSyncing,
+    canSync: (state) => state.backend?.isAvailable() && !state.isSyncing,
 
-    canSubmit: (state) => state.backend.isAvailable() && !state.isSubmitting,
+    canSubmit: (state) => state.backend?.isAvailable() && !state.isSubmitting,
   },
 
   actions: {
@@ -68,7 +68,7 @@ export const useTranslationStore = defineStore("translation", {
 
     async dbOpen(): Promise<IDBDatabase> {
       return new Promise((resolve, reject) => {
-        const request = indexedDB.open('nr-translations', 2);
+        const request = indexedDB.open("nr-translations", 2);
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result);
@@ -77,24 +77,24 @@ export const useTranslationStore = defineStore("translation", {
           const db = (event.target as IDBOpenDBRequest).result;
 
           // Clear old store if it exists
-          if (db.objectStoreNames.contains('translations')) {
-            db.deleteObjectStore('translations');
+          if (db.objectStoreNames.contains("translations")) {
+            db.deleteObjectStore("translations");
           }
 
           // Create new store with composite key
-          const store = db.createObjectStore('translations', { keyPath: 'compositeKey' });
+          const store = db.createObjectStore("translations", { keyPath: "compositeKey" });
 
           // Index for querying by system-language combination
-          store.createIndex('systemLanguage', 'systemLanguage', { unique: false });
-          store.createIndex('systemId', 'systemId', { unique: false });
+          store.createIndex("systemLanguage", "systemLanguage", { unique: false });
+          store.createIndex("systemId", "systemId", { unique: false });
         };
       });
     },
 
     async dbPutRecord(record: any): Promise<void> {
       const db = await this.dbOpen();
-      const transaction = db.transaction(['translations'], 'readwrite');
-      const store = transaction.objectStore('translations');
+      const transaction = db.transaction(["translations"], "readwrite");
+      const store = transaction.objectStore("translations");
 
       return new Promise((resolve, reject) => {
         const request = store.put(record);
@@ -105,8 +105,8 @@ export const useTranslationStore = defineStore("translation", {
 
     async dbGetByIndex(indexName: string, value: string): Promise<any[]> {
       const db = await this.dbOpen();
-      const transaction = db.transaction(['translations'], 'readonly');
-      const store = transaction.objectStore('translations');
+      const transaction = db.transaction(["translations"], "readonly");
+      const store = transaction.objectStore("translations");
       const index = store.index(indexName);
 
       return new Promise((resolve, reject) => {
@@ -129,8 +129,8 @@ export const useTranslationStore = defineStore("translation", {
 
     async dbDeleteByIndex(indexName: string, value: string): Promise<void> {
       const db = await this.dbOpen();
-      const transaction = db.transaction(['translations'], 'readwrite');
-      const store = transaction.objectStore('translations');
+      const transaction = db.transaction(["translations"], "readwrite");
+      const store = transaction.objectStore("translations");
       const index = store.index(indexName);
 
       return new Promise((resolve, reject) => {
@@ -152,8 +152,8 @@ export const useTranslationStore = defineStore("translation", {
 
     async dbDeleteByCompositeKey(compositeKey: string): Promise<void> {
       const db = await this.dbOpen();
-      const transaction = db.transaction(['translations'], 'readwrite');
-      const store = transaction.objectStore('translations');
+      const transaction = db.transaction(["translations"], "readwrite");
+      const store = transaction.objectStore("translations");
 
       return new Promise((resolve, reject) => {
         const request = store.delete(compositeKey);
@@ -164,6 +164,7 @@ export const useTranslationStore = defineStore("translation", {
 
     async saveTranslationsToLocal(systemId: string, languageCode: string, translations?: TranslationString[]) {
       const systemLanguageKey = `${systemId}-${languageCode}`;
+      console.log("💾 Saving to IndexedDB:", { systemId, languageCode, translationsCount: translations?.length });
 
       try {
         if (translations && translations.length > 0) {
@@ -180,20 +181,23 @@ export const useTranslationStore = defineStore("translation", {
                 translation: translation.translation,
                 catalogue: translation.catalogue,
                 modified: translation.modified,
-                lastSaved: Date.now()
+                lastSaved: Date.now(),
               };
 
+              console.log("💾 Saving translation:", { key: translation.key, translation: translation.translation });
               await this.dbPutRecord(record);
             } else {
               // If not translated, remove the record if it exists
+              console.log("🗑️ Removing translation:", { key: translation.key });
               await this.dbDeleteByCompositeKey(`${systemId}-${languageCode}-${translation.key}`);
             }
           }
         } else {
           // Full save - clear and save all translated strings
-          await this.dbDeleteByIndex('systemLanguage', systemLanguageKey);
-          
-          const translatedStrings = this.translations.filter(t => t.translated);
+          await this.dbDeleteByIndex("systemLanguage", systemLanguageKey);
+
+          const translatedStrings = this.translations.filter((t) => t.translated);
+          console.log("💾 Full save - translated strings:", translatedStrings.length);
           for (const translation of translatedStrings) {
             const record = {
               compositeKey: `${systemId}-${languageCode}-${translation.key}`,
@@ -204,60 +208,71 @@ export const useTranslationStore = defineStore("translation", {
               translation: translation.translation,
               catalogue: translation.catalogue,
               modified: translation.modified,
-              lastSaved: Date.now()
+              lastSaved: Date.now(),
             };
 
             await this.dbPutRecord(record);
           }
         }
+        console.log("✅ Successfully saved to IndexedDB");
       } catch (error) {
-        console.warn('Failed to save translations to IndexedDB:', error);
+        console.error("❌ Failed to save translations to IndexedDB:", error);
       }
     },
 
     async loadTranslationsFromLocal(systemId: string, languageCode: string): Promise<boolean> {
       const systemLanguageKey = `${systemId}-${languageCode}`;
+      console.log("📖 Loading from IndexedDB:", { systemId, languageCode, systemLanguageKey });
 
       try {
         // Get all saved translations for this system-language
-        const savedTranslations = await this.dbGetByIndex('systemLanguage', systemLanguageKey);
+        const savedTranslations = await this.dbGetByIndex("systemLanguage", systemLanguageKey);
+        console.log("📖 Found saved translations:", savedTranslations.length);
 
         if (savedTranslations.length === 0) {
+          console.log("📖 No saved translations found");
           return false;
         }
 
-        // Restore translations to current state - optimized with Map lookups
-        const translationMap = new Map(this.translations.map(t => [t.key, t]));
+        console.log("📖 Saved translations sample:", savedTranslations.slice(0, 3));
 
+        // Restore translations to current state - optimized with Map lookups
+        const translationMap = new Map(this.translations.map((t) => [t.key, t]));
+        console.log("📖 Current translations in memory:", this.translations.length);
+
+        let restoredCount = 0;
         savedTranslations.forEach((savedTranslation) => {
           const current = translationMap.get(savedTranslation.key);
           if (current) {
+            console.log("📖 Restoring translation:", {
+              key: savedTranslation.key,
+              oldTranslation: current.translation,
+              newTranslation: savedTranslation.translation,
+            });
             current.translation = savedTranslation.translation || "";
             current.translated = true;
             current.modified = savedTranslation.modified || false;
+            restoredCount++;
+          } else {
+            console.log("📖 Translation key not found in memory:", savedTranslation.key);
           }
         });
 
-        // Update catalogues to match - optimized with Map lookup
-        const keyMap = new Map(this.translations.map(t => [t.key, t]));
+        console.log("📖 Restored translations:", restoredCount);
 
-        this.catalogues.forEach(catalogue => {
-          catalogue.strings.forEach(string => {
-            const translation = keyMap.get(string.key);
-            if (translation) {
-              string.translation = translation.translation;
-              string.translated = translation.translated;
-              string.modified = translation.modified;
-            }
-          });
-        });
-
+        console.log("📖 Skipping catalogue update during IndexedDB load to prevent freeze...");
+        // NOTE: Catalogues will be updated by the UI components when they render
+        // This prevents the freeze issue with large datasets
+        
+        console.log("📖 Updating translated count...");
         // Update counts
-        this.translatedCount = this.translations.filter(s => s.translated).length;
+        this.translatedCount = this.translations.filter((s) => s.translated).length;
+        console.log("📖 Updated translated count:", this.translatedCount);
 
+        console.log("✅ Successfully loaded from IndexedDB");
         return true;
       } catch (error) {
-        console.warn('Failed to load translations from IndexedDB:', error);
+        console.error("❌ Failed to load translations from IndexedDB:", error);
         return false;
       }
     },
@@ -266,82 +281,122 @@ export const useTranslationStore = defineStore("translation", {
       const systemLanguageKey = `${systemId}-${languageCode}`;
 
       try {
-        await this.dbDeleteByIndex('systemLanguage', systemLanguageKey);
+        await this.dbDeleteByIndex("systemLanguage", systemLanguageKey);
       } catch (error) {
-        console.warn('Failed to clear translations from IndexedDB:', error);
+        console.warn("Failed to clear translations from IndexedDB:", error);
       }
     },
 
-    async loadTranslationsFromSource(translationSource: TranslationSource, languageCode?: string, progressCallback?: (progress: number, message?: string) => void) {
+    async loadTranslationsFromSource(
+      translationSource: TranslationSource,
+      languageCode?: string,
+      progressCallback?: (progress: number, message?: string) => void
+    ) {
       const sourceId = translationSource.getId();
+      console.log("🔄 loadTranslationsFromSource started:", { sourceId, languageCode });
 
       // Only load if not already loaded for this source
       if (this.isLoaded && this.currentSystemId === sourceId) {
+        console.log("🔄 Already loaded for this source, skipping");
         return;
       }
 
       try {
+        console.log("🔄 Setting translation source and ID");
         this.translationSource = translationSource;
         this.currentSystemId = sourceId;
 
+        console.log("🔄 Getting translations from source...");
         // Get translations using the source
-        const { strings: rawStrings, catalogues: catalogueList, translations: allTranslations } =
-          await this.translationSource.getTranslations(languageCode || 'en', progressCallback);
+        const {
+          strings: rawStrings,
+          catalogues: catalogueList,
+          translations: allTranslations,
+        } = await this.translationSource.getTranslations(languageCode || "en", progressCallback);
 
+        console.log("🔄 Received translations:", {
+          stringsKeys: Object.keys(rawStrings).length,
+          cataloguesCount: catalogueList.length,
+          translationsCount: allTranslations.length
+        });
+
+        console.log("🔄 Storing translations in state...");
         this.strings = rawStrings;
         globalThis.strings = rawStrings;
         this.catalogues = catalogueList;
         this.translations = allTranslations;
         globalThis.translations = allTranslations;
         this.totalStrings = allTranslations.length;
-        this.translatedCount = allTranslations.filter(s => s.translated).length;
+        this.translatedCount = allTranslations.filter((s) => s.translated).length;
         this.isLoaded = true;
 
+        console.log("🔄 Setting translation source again...");
         // Store the translation source
         this.translationSource = translationSource;
 
+        console.log("🔄 Loading from IndexedDB...");
         // Try to restore saved translations from IndexedDB
         if (languageCode) {
           await this.loadTranslationsFromLocal(sourceId, languageCode);
         }
+        
+        console.log("✅ loadTranslationsFromSource completed successfully");
       } catch (error) {
-        console.error("Failed to load translations:", error);
+        console.error("❌ Failed to load translations:", error);
         throw error;
       }
     },
 
-    async ensureTranslationsLoaded(systemId: string, languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<void> {
-      // If translations are already loaded for this exact system, return
-      if (this.isLoaded && this.currentSystemId === systemId) {
+    async ensureTranslationsLoaded(
+      systemId: string,
+      languageCode: string,
+      progressCallback?: (progress: number, message?: string) => void
+    ): Promise<void> {
+      // Create the appropriate translation source for this systemId to get the correct sourceId
+      const { createTranslationSourceForSystem } = await import("./translationSources");
+      const source = createTranslationSourceForSystem(systemId);
+      const sourceId = source.getId();
+
+      console.log("🚀 ensureTranslationsLoaded called:", {
+        systemId,
+        sourceId,
+        languageCode,
+        isLoaded: this.isLoaded,
+        currentSystemId: this.currentSystemId,
+      });
+
+      // If translations are already loaded for this exact system, try to restore from IndexedDB and return
+      if (this.isLoaded && this.currentSystemId === sourceId) {
+        console.log("🚀 System already loaded, restoring from IndexedDB");
+        // Always try to load from IndexedDB to restore any saved translations
+        await this.loadTranslationsFromLocal(sourceId, languageCode);
         return;
       }
 
+      console.log("🚀 Loading fresh data for system");
       // Always clear cache when loading a different system
       this.clearCache();
 
-      // Create the appropriate translation source for this systemId
-      const { createTranslationSourceForSystem } = await import("./translationSources");
-      const source = createTranslationSourceForSystem(systemId);
-
       // Load translations using the source
       await this.loadTranslationsFromSource(source, languageCode, progressCallback);
-      this.currentSystemId = systemId;
+      this.currentSystemId = sourceId;
     },
 
     updateTranslation(stringId: string, translation: string, systemId?: string, languageCode?: string) {
-      const translationObj = this.translations.find(t => t.id === stringId);
+      console.log("updating");
+      const translationObj = this.translations.find((t) => t.id === stringId);
       if (translationObj) {
         translationObj.translation = translation;
         translationObj.modified = true;
         translationObj.translated = translation.trim() !== "";
 
         // Update translated count
-        this.translatedCount = this.translations.filter(s => s.translated).length;
+        this.translatedCount = this.translations.filter((s) => s.translated).length;
 
         // Update the catalogue's string as well
-        const catalogue = this.catalogues.find(cat => cat.id === translationObj.catalogue);
+        const catalogue = this.catalogues.find((cat) => cat.id === translationObj.catalogue);
         if (catalogue) {
-          const catString = catalogue.strings.find(s => s.id === stringId);
+          const catString = catalogue.strings.find((s) => s.id === stringId);
           if (catString) {
             catString.translation = translation;
             catString.modified = true;
@@ -381,7 +436,12 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     // Sync translations from file
-    async syncFromFile(file: File, systemId: string, languageCode: string, strategy: 'server-wins' | 'client-wins' | 'ask-user' = 'ask-user'): Promise<{ conflicts: Array<{ key: string, original: string, local: string, server: string }> }> {
+    async syncFromFile(
+      file: File,
+      systemId: string,
+      languageCode: string,
+      strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
+    ): Promise<{ conflicts: Array<{ key: string; original: string; local: string; server: string }> }> {
       const fileBackend = new FileBackend(file);
       const backendTranslations = await fileBackend.fetchTranslations(systemId, languageCode);
 
@@ -389,9 +449,13 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     // Sync translations from backend with conflict detection
-    async syncFromBackend(systemId: string, languageCode: string, strategy: 'server-wins' | 'client-wins' | 'ask-user' = 'ask-user'): Promise<{ conflicts: Array<{ key: string, original: string, local: string, server: string }> }> {
-      if (!this.backend.isAvailable()) {
-        throw new Error('No backend configured');
+    async syncFromBackend(
+      systemId: string,
+      languageCode: string,
+      strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
+    ): Promise<{ conflicts: Array<{ key: string; original: string; local: string; server: string }> }> {
+      if (!this.backend?.isAvailable()) {
+        throw new Error("No backend configured");
       }
 
       const backendTranslations = await this.backend.fetchTranslations(systemId, languageCode);
@@ -400,9 +464,14 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     // Core sync logic that handles conflicts and updates
-    async syncTranslations(backendTranslations: TranslationString[], systemId: string, languageCode: string, strategy: 'server-wins' | 'client-wins' | 'ask-user' = 'ask-user'): Promise<{ conflicts: Array<{ key: string, original: string, local: string, server: string }> }> {
+    async syncTranslations(
+      backendTranslations: TranslationString[],
+      systemId: string,
+      languageCode: string,
+      strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
+    ): Promise<{ conflicts: Array<{ key: string; original: string; local: string; server: string }> }> {
       if (this.isSyncing) {
-        throw new Error('Sync already in progress');
+        throw new Error("Sync already in progress");
       }
 
       this.isSyncing = true;
@@ -413,9 +482,9 @@ export const useTranslationStore = defineStore("translation", {
           return { conflicts: [] };
         }
 
-        const translationMap = new Map(this.translations.map(t => [t.key, t]));
-        const conflicts: Array<{ key: string, original: string, local: string, server: string }> = [];
-        const safeUpdates: Array<{ local: TranslationString, server: TranslationString }> = [];
+        const translationMap = new Map(this.translations.map((t) => [t.key, t]));
+        const conflicts: Array<{ key: string; original: string; local: string; server: string }> = [];
+        const safeUpdates: Array<{ local: TranslationString; server: TranslationString }> = [];
 
         // Detect conflicts and safe updates
         backendTranslations.forEach((serverTranslation) => {
@@ -424,15 +493,17 @@ export const useTranslationStore = defineStore("translation", {
           if (!local) return;
 
           // Check for conflicts: both local and server have changes
-          if (local.modified &&
+          if (
+            local.modified &&
             local.translation !== serverTranslation.translation &&
-            local.translation.trim() !== '' &&
-            serverTranslation.translation.trim() !== '') {
+            local.translation.trim() !== "" &&
+            serverTranslation.translation.trim() !== ""
+          ) {
             conflicts.push({
               key: serverTranslation.key,
               original: local.original,
               local: local.translation,
-              server: serverTranslation.translation
+              server: serverTranslation.translation,
             });
           } else {
             // Safe to update
@@ -449,8 +520,8 @@ export const useTranslationStore = defineStore("translation", {
 
         // Handle conflicts based on strategy
         if (conflicts.length > 0) {
-          if (strategy === 'server-wins') {
-            conflicts.forEach(conflict => {
+          if (strategy === "server-wins") {
+            conflicts.forEach((conflict) => {
               const local = translationMap.get(conflict.key);
               if (local) {
                 local.translation = conflict.server;
@@ -458,9 +529,9 @@ export const useTranslationStore = defineStore("translation", {
                 local.modified = false;
               }
             });
-          } else if (strategy === 'client-wins') {
+          } else if (strategy === "client-wins") {
             // Keep local changes, do nothing
-          } else if (strategy === 'ask-user') {
+          } else if (strategy === "ask-user") {
             // Return conflicts for user to resolve
             return { conflicts };
           }
@@ -470,13 +541,13 @@ export const useTranslationStore = defineStore("translation", {
         this.updateCataloguesFromTranslations();
 
         // Update counts
-        this.translatedCount = this.translations.filter(s => s.translated).length;
+        this.translatedCount = this.translations.filter((s) => s.translated).length;
 
         // Save to local storage
         await this.saveTranslationsToLocal(systemId, languageCode);
 
         this.lastSyncTime = Date.now();
-        return { conflicts: strategy === 'ask-user' ? conflicts : [] };
+        return { conflicts: strategy === "ask-user" ? conflicts : [] };
       } finally {
         this.isSyncing = false;
       }
@@ -484,10 +555,10 @@ export const useTranslationStore = defineStore("translation", {
 
     // Helper method to update catalogues from translations
     updateCataloguesFromTranslations() {
-      const keyMap = new Map(this.translations.map(t => [t.key, t]));
+      const keyMap = new Map(this.translations.map((t) => [t.key, t]));
 
-      this.catalogues.forEach(catalogue => {
-        catalogue.strings.forEach(string => {
+      this.catalogues.forEach((catalogue) => {
+        catalogue.strings.forEach((string) => {
           const translation = keyMap.get(string.key);
           if (translation) {
             string.translation = translation.translation;
@@ -499,12 +570,12 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     // Resolve conflicts with user choices
-    resolveConflicts(conflicts: Array<{ key: string, choice: 'local' | 'server', server: string }>) {
-      const translationMap = new Map(this.translations.map(t => [t.key, t]));
+    resolveConflicts(conflicts: Array<{ key: string; choice: "local" | "server"; server: string }>) {
+      const translationMap = new Map(this.translations.map((t) => [t.key, t]));
 
-      conflicts.forEach(conflict => {
+      conflicts.forEach((conflict) => {
         const local = translationMap.get(conflict.key);
-        if (local && conflict.choice === 'server') {
+        if (local && conflict.choice === "server") {
           local.translation = conflict.server;
           local.translated = true;
           local.modified = false;
@@ -513,42 +584,42 @@ export const useTranslationStore = defineStore("translation", {
       });
 
       this.updateCataloguesFromTranslations();
-      this.translatedCount = this.translations.filter(s => s.translated).length;
+      this.translatedCount = this.translations.filter((s) => s.translated).length;
     },
 
     // Submit translations to backend
     async submitToBackend(systemId: string, languageCode: string, onlyModified: boolean = true): Promise<void> {
-      if (!this.backend.isAvailable()) {
-        throw new Error('No backend configured');
+      if (!this.backend?.isAvailable()) {
+        throw new Error("No backend configured");
       }
 
       if (this.isSubmitting) {
-        throw new Error('Submit already in progress');
+        throw new Error("Submit already in progress");
       }
 
       this.isSubmitting = true;
 
       try {
         // Get translations to submit
-        let translationsToSubmit = this.translations.filter(t => t.translated && t.translation.trim() !== '');
+        let translationsToSubmit = this.translations.filter((t) => t.translated && t.translation.trim() !== "");
 
         if (onlyModified) {
-          translationsToSubmit = translationsToSubmit.filter(t => t.modified);
+          translationsToSubmit = translationsToSubmit.filter((t) => t.modified);
         }
 
         if (translationsToSubmit.length > 0) {
           await this.backend.uploadTranslations(systemId, languageCode, translationsToSubmit);
 
           // Mark submitted translations as unmodified
-          translationsToSubmit.forEach(t => {
+          translationsToSubmit.forEach((t) => {
             t.modified = false;
           });
 
           // Update catalogues to match
-          const keyMap = new Map(this.translations.map(t => [t.key, t]));
+          const keyMap = new Map(this.translations.map((t) => [t.key, t]));
 
-          this.catalogues.forEach(catalogue => {
-            catalogue.strings.forEach(string => {
+          this.catalogues.forEach((catalogue) => {
+            catalogue.strings.forEach((string) => {
               const translation = keyMap.get(string.key);
               if (translation) {
                 string.modified = translation.modified;
@@ -566,13 +637,20 @@ export const useTranslationStore = defineStore("translation", {
       }
     },
 
-    exportTranslations(format: ExportFormat, languageCode: string, languageName: string, systemName: string, onlyTranslated: boolean = false, onlyUntranslated: boolean = false): { content: string; filename: string; mimeType: string } {
+    exportTranslations(
+      format: ExportFormat,
+      languageCode: string,
+      languageName: string,
+      systemName: string,
+      onlyTranslated: boolean = false,
+      onlyUntranslated: boolean = false
+    ): { content: string; filename: string; mimeType: string } {
       let dataToExport = this.translations;
 
       if (onlyTranslated) {
-        dataToExport = this.translations.filter(t => t.translated);
+        dataToExport = this.translations.filter((t) => t.translated);
       } else if (onlyUntranslated) {
-        dataToExport = this.translations.filter(t => !t.translated);
+        dataToExport = this.translations.filter((t) => !t.translated);
       }
 
       let content = "";
@@ -587,15 +665,15 @@ export const useTranslationStore = defineStore("translation", {
               language: languageCode,
               languageName: languageName,
               exportDate: new Date().toISOString(),
-              totalStrings: dataToExport.length
+              totalStrings: dataToExport.length,
             },
-            translations: dataToExport.map(t => ({
+            translations: dataToExport.map((t) => ({
               key: t.key,
               original: t.original,
               translation: t.translation || "",
               translated: t.translated,
-              catalogue: t.catalogue
-            }))
+              catalogue: t.catalogue,
+            })),
           };
           content = JSON.stringify(jsonData, null, 2);
           filename += ".json";
@@ -617,7 +695,7 @@ export const useTranslationStore = defineStore("translation", {
         case "csv":
           // CSV header
           content = "Original,Translation,Catalogue,Status\n";
-          dataToExport.forEach(t => {
+          dataToExport.forEach((t) => {
             const original = t.original.replace(/"/g, '""');
             const translation = (t.translation || "").replace(/"/g, '""');
             const status = t.translated ? "translated" : "untranslated";
@@ -636,7 +714,7 @@ export const useTranslationStore = defineStore("translation", {
           content += `"Content-Type: text/plain; charset=UTF-8\\n"\n`;
           content += `"Language: ${languageCode}\\n"\n\n`;
 
-          dataToExport.forEach(t => {
+          dataToExport.forEach((t) => {
             content += `#: ${t.catalogue}\n`;
             content += `msgid "${t.original.replace(/"/g, '\\"')}"\n`;
             content += `msgstr "${(t.translation || "").replace(/"/g, '\\"')}"\n\n`;
@@ -649,8 +727,22 @@ export const useTranslationStore = defineStore("translation", {
       return { content, filename, mimeType };
     },
 
-    downloadExport(format: ExportFormat, languageCode: string, languageName: string, systemName: string, onlyTranslated: boolean = false, onlyUntranslated: boolean = false) {
-      const { content, filename, mimeType } = this.exportTranslations(format, languageCode, languageName, systemName, onlyTranslated, onlyUntranslated);
+    downloadExport(
+      format: ExportFormat,
+      languageCode: string,
+      languageName: string,
+      systemName: string,
+      onlyTranslated: boolean = false,
+      onlyUntranslated: boolean = false
+    ) {
+      const { content, filename, mimeType } = this.exportTranslations(
+        format,
+        languageCode,
+        languageName,
+        systemName,
+        onlyTranslated,
+        onlyUntranslated
+      );
 
       // Create and download the file
       const blob = new Blob([content], { type: mimeType });
@@ -662,6 +754,6 @@ export const useTranslationStore = defineStore("translation", {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-    }
-  }
+    },
+  },
 });

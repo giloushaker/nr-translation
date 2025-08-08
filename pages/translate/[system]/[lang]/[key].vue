@@ -1,7 +1,7 @@
 <template>
   <div class="container">
-      <!-- Main content -->
-      <div class="translation-interface">
+    <!-- Main content -->
+    <div class="translation-interface">
       <div class="header">
         <button @click="goBack" class="back-button">← Back to Overview</button>
         <div class="header-info">
@@ -34,8 +34,8 @@
 
           <div class="translation-section">
             <label class="section-label" :for="`translation-${currentTranslation.id}`">
-              {{ languageName }} Translation
-            </label>
+              {{ languageName }} Translation </label
+            >sss
             <textarea
               :id="`translation-${currentTranslation.id}`"
               v-model="currentTranslation.translation"
@@ -66,7 +66,7 @@
       </div>
 
       <div v-else class="no-translation"> Translation not found. </div>
-      </div>
+    </div>
   </div>
 </template>
 
@@ -222,7 +222,7 @@ const handleKeyPress = (event: KeyboardEvent) => {
 onMounted(() => {
   // Set initial index based on current key
   updateCurrentIndex();
-  
+
   // Add keyboard listeners
   window.addEventListener("keydown", handleKeyPress);
 });
