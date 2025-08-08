@@ -39,7 +39,7 @@
             <textarea
               :id="`translation-${currentTranslation.id}`"
               v-model="currentTranslation.translation"
-              @input="markAsModified"
+              @change="markAsModified"
               :placeholder="`Enter ${languageName} translation...`"
               class="translation-input"
               rows="4"

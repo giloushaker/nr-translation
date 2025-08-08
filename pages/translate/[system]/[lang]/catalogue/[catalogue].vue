@@ -45,8 +45,8 @@
             </div>
             <div class="col-translation">
               <textarea
-                v-model="string.translation"
                 @change="markAsModified(string)"
+                v-model="string.translation"
                 :placeholder="`Enter ${languageName} translation...`"
                 class="translation-input"
                 rows="2"
