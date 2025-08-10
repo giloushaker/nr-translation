@@ -1,5 +1,12 @@
 <template>
   <div class="container">
+    <!-- Export Dialog -->
+    <ExportDialog
+      :show="showExportDialog"
+      @close="showExportDialog = false"
+      @export="handleExport"
+    />
+
     <!-- Sync Dialog -->
     <SyncDialog
       :show="showSyncDialog"
@@ -28,6 +35,13 @@
           :title="hasBackend ? 'Sync translations from backend' : 'Import translations from file'"
         >
           {{ isSyncing ? 'Syncing...' : 'Sync Translations' }}
+        </button>
+        <button
+          @click="showExportDialog = true"
+          class="export-button"
+          title="Export translations to file"
+        >
+          Export Translations
         </button>
       </div>
     </div>
@@ -80,16 +94,18 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useTranslationStore } from "~/stores/translationStore";
+import { useTranslationStore, type ExportFormat } from "~/stores/translationStore";
 import { useStatsStore } from "~/stores/statsStore";
 import SyncDialog from "~/components/SyncDialog.vue";
+import ExportDialog from "~/components/ExportDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
 const translationStore = useTranslationStore();
 const statsStore = useStatsStore();
 
-// Sync dialog states
+// Dialog states
+const showExportDialog = ref(false);
 const showSyncDialog = ref(false);
 const syncConflicts = ref<Array<{ key: string; original: string; local: string; server: string }>>([]);
 const selectedFile = ref<File | null>(null);
@@ -302,6 +318,19 @@ const handleConflictResolution = async (resolutions: Array<{ key: string; choice
     }
   }
 };
+
+const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onlyUntranslated: boolean }) => {
+  translationStore.downloadExport(
+    data.format,
+    languageCode.value,
+    languageName.value,
+    translationStore.systemName,
+    data.onlyTranslated,
+    data.onlyUntranslated
+  );
+
+  showExportDialog.value = false;
+};
 </script>
 
 <style scoped>
@@ -376,6 +405,22 @@ const handleConflictResolution = async (resolutions: Array<{ key: string; choice
 .sync-button:disabled:hover {
   background: #6c757d;
   transform: none;
+}
+
+.export-button {
+  padding: 0.5rem 1rem;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  margin-left: 0.75rem;
+}
+
+.export-button:hover {
+  background: #1e7e34;
 }
 
 .catalogues-grid {
