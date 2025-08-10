@@ -81,11 +81,13 @@
 import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTranslationStore } from "~/stores/translationStore";
+import { useStatsStore } from "~/stores/statsStore";
 import SyncDialog from "~/components/SyncDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
 const translationStore = useTranslationStore();
+const statsStore = useStatsStore();
 
 // Sync dialog states
 const showSyncDialog = ref(false);
@@ -171,7 +173,13 @@ const handleSyncSubmit = async (data: {
   selectedFile: File | null;
 }) => {
   try {
-    let result;
+    let result: {
+      conflicts: Array<{ key: string; original: string; local: string; server: string }>;
+      received?: number;
+      uploaded?: number;
+      resolvedConflicts?: number;
+      serverTranslations?: Array<{ key: string; [key: string]: any }>;
+    };
 
     if (data.selectedFile) {
       // Use file-based sync
@@ -194,7 +202,7 @@ const handleSyncSubmit = async (data: {
       syncConflicts.value = result.conflicts;
       // Store server translations for proper upload logic during conflict resolution
       if (result.serverTranslations) {
-        serverTranslationsFromSync.value = new Set(result.serverTranslations.map(t => t.key));
+        serverTranslationsFromSync.value = new Set(result.serverTranslations.map((t: { key: string }) => t.key));
       }
       // Keep dialog open to show conflicts
       return;
@@ -203,6 +211,13 @@ const handleSyncSubmit = async (data: {
     // Clear conflicts and file selection
     syncConflicts.value = [];
     selectedFile.value = null;
+
+    // Update stats cache with new translation counts
+    statsStore.updateTranslationCount(
+      route.params.system as string,
+      languageCode.value,
+      translationStore.translatedCount
+    );
 
     // Show summary instead of closing dialog
     syncSummary.value = {
@@ -248,6 +263,13 @@ const handleConflictResolution = async (resolutions: Array<{ key: string; choice
       route.params.system as string,
       languageCode.value,
       serverTranslationsFromSync.value
+    );
+    
+    // Update stats cache with new translation counts
+    statsStore.updateTranslationCount(
+      route.params.system as string,
+      languageCode.value,
+      translationStore.translatedCount
     );
     
     // Clear conflicts and show summary

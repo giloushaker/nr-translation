@@ -12,7 +12,7 @@
     />
 
     <!-- Sync Dialog -->
-    <SyncDialog
+    <!-- <SyncDialog
       :show="showSyncDialog"
       :sync-conflicts="syncConflicts"
       :selected-file="selectedFile"
@@ -21,7 +21,7 @@
       @close="closeSyncDialog"
       @file-select="handleFileSelect"
       @sync="handleSyncSubmit"
-    />
+    /> -->
 
     <!-- Main content -->
     <div class="translation-interface">

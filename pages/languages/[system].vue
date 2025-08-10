@@ -64,6 +64,7 @@ import { ref, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useLoadingStore } from "~/stores/loadingStore";
 import { useTranslationStore } from "~/stores/translationStore";
+import { useStatsStore } from "~/stores/statsStore";
 
 // Explicitly disable layout for this page to prevent conflicts with translate layout
 definePageMeta({
@@ -84,151 +85,20 @@ const route = useRoute();
 const router = useRouter();
 const loadingStore = useLoadingStore();
 const translationStore = useTranslationStore();
+const statsStore = useStatsStore();
 const languages = ref<Language[]>([]);
 const systemName = ref("");
 
-// Default language list
-const defaultLanguageCodes = [
-  { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-  { code: "it", name: "Italian" },
-  { code: "pt", name: "Portuguese" },
-  { code: "ru", name: "Russian" },
-  { code: "ja", name: "Japanese" },
-  { code: "zh", name: "Chinese" },
-];
-
-// Helper function to generate default language data (all zeros)
-const generateDefaultLanguages = (): Language[] => {
-  return defaultLanguageCodes.map((lang) => ({
-    code: lang.code,
-    name: lang.name,
-    translatedPercent: 0,
-    reviewedPercent: 0,
-    totalStrings: 0,
-    translatedStrings: 0,
-    untranslatedStrings: 0,
-  }));
-};
-
-// Helper function to get total string count (cached)
-let cachedSystemStringCount: number | null = null;
-const getSystemStringCount = async (systemId: string): Promise<number> => {
-  if (cachedSystemStringCount !== null) {
-    return cachedSystemStringCount;
-  }
-  
-  try {
-    // Check if translation store already has the data loaded
-    if (translationStore.isLoaded && translationStore.currentSystemId?.includes(systemId)) {
-      cachedSystemStringCount = translationStore.totalStrings;
-      return cachedSystemStringCount;
-    }
-    
-    // If not loaded, just return 0 for now - stats will update when system is loaded
-    return 0;
-  } catch (error) {
-    console.warn("Failed to get system string count:", error);
-    return 0;
-  }
-};
-
-// Helper function to calculate local stats from IndexedDB (fast version)
-const calculateLocalStats = async (systemId: string, languageCode: string): Promise<{ total: number; translated: number; reviewed: number }> => {
-  try {
-    const translationSources = await import("~/stores/translationSources");
-    const source = translationSources.createTranslationSourceForSystem(systemId);
-    const sourceId = source.getId();
-    
-    // Get total strings (fast - from cache if available)
-    const totalStrings = await getSystemStringCount(systemId);
-    
-    // Get local translations from IndexedDB
-    const systemLanguageKey = `${sourceId}-${languageCode}`;
-    const db = await translationStore.dbOpen();
-    const transaction = db.transaction(['translations'], 'readonly');
-    const store = transaction.objectStore('translations');
-    const index = store.index('systemLanguage');
-    
-    const savedTranslations = await new Promise<any[]>((resolve, reject) => {
-      const results: any[] = [];
-      const request = index.openCursor(IDBKeyRange.only(systemLanguageKey));
-      
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result;
-        if (cursor) {
-          results.push(cursor.value);
-          cursor.continue();
-        } else {
-          resolve(results);
-        }
-      };
-      
-      request.onerror = () => reject(request.error);
-    });
-    
-    const translatedStrings = savedTranslations.length;
-    const reviewedStrings = 0; // We don't track reviewed status yet
-    
-    return {
-      total: totalStrings,
-      translated: translatedStrings,
-      reviewed: reviewedStrings
-    };
-    
-  } catch (error) {
-    console.warn("Failed to calculate local stats:", error);
-    return { total: 0, translated: 0, reviewed: 0 };
-  }
-};
-
-// Helper function to generate language data from backend stats or local calculations
-const generateLanguageData = async (systemId: string, backendStats: any): Promise<Language[]> => {
-  const results = [];
-  
-  for (const lang of defaultLanguageCodes) {
-    // Check if backend has stats for this language
-    const langStats = backendStats?.languages?.[lang.code];
-
-    if (langStats) {
-      const totalStrings = langStats.total || 0;
-      const translatedStrings = langStats.translated || 0;
-      const reviewedStrings = langStats.reviewed || 0;
-      const untranslatedStrings = totalStrings - translatedStrings;
-
-      results.push({
-        code: lang.code,
-        name: lang.name,
-        translatedPercent: totalStrings > 0 ? Math.round((translatedStrings / totalStrings) * 100) : 0,
-        reviewedPercent: totalStrings > 0 ? Math.round((reviewedStrings / totalStrings) * 100) : 0,
-        totalStrings,
-        translatedStrings,
-        untranslatedStrings: Math.max(0, untranslatedStrings),
-      });
-    } else {
-      // No backend stats, calculate from local data (fast version)
-      const localStats = await calculateLocalStats(systemId, lang.code);
-      const totalStrings = localStats.total;
-      const translatedStrings = localStats.translated;
-      const reviewedStrings = localStats.reviewed;
-      const untranslatedStrings = Math.max(0, totalStrings - translatedStrings);
-
-      results.push({
-        code: lang.code,
-        name: lang.name,
-        translatedPercent: totalStrings > 0 ? Math.round((translatedStrings / totalStrings) * 100) : 0,
-        reviewedPercent: totalStrings > 0 ? Math.round((reviewedStrings / totalStrings) * 100) : 0,
-        totalStrings,
-        translatedStrings,
-        untranslatedStrings,
-      });
-    }
-  }
-  
-  return results;
-};
+// Helper function to convert LanguageStats to Language interface
+const convertStatsToLanguage = (stats: any): Language => ({
+  code: stats.code,
+  name: stats.name,
+  translatedPercent: stats.translatedPercent,
+  reviewedPercent: stats.reviewedPercent,
+  totalStrings: stats.total,
+  translatedStrings: stats.translated,
+  untranslatedStrings: stats.untranslated,
+});
 
 const loadSystem = async (systemId: string) => {
   await loadingStore.withLoading(async (updateProgress) => {
@@ -243,22 +113,14 @@ const loadSystem = async (systemId: string) => {
 
       updateProgress(50, "Loading translation statistics...");
 
-      // Try to get stats from backend if available
-      let backendStats = null;
-      if (translationStore.backend?.isAvailable()) {
-        try {
-          console.log("Loading stats from backend for system:", systemId);
-          backendStats = await translationStore.backend.getStats(systemId);
-          console.log("Backend stats loaded:", backendStats);
-        } catch (error) {
-          console.warn("Failed to load stats from backend:", error);
-        }
-      }
+      // Load stats using the centralized statsStore
+      const systemStats = await statsStore.loadStatsForSystem(systemId);
+      console.log("Stats loaded:", systemStats);
 
       updateProgress(80, "Preparing language data...");
 
-      // Generate language list with backend stats or defaults
-      languages.value = await generateLanguageData(systemId, backendStats);
+      // Convert stats to language format
+      languages.value = Object.values(systemStats.languages).map(convertStatsToLanguage);
 
       updateProgress(100, "Complete!");
 
@@ -268,7 +130,7 @@ const loadSystem = async (systemId: string) => {
       console.error("Failed to load system:", error, "for systemId:", systemId);
       // Don't redirect to home, just show error in console and use fallback name
       systemName.value = systemId; // Fallback to systemId as name
-      languages.value = generateDefaultLanguages();
+      languages.value = [];
     }
   }, "Initializing...");
 };
