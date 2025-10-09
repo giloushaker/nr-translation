@@ -90,15 +90,43 @@ export class BSDataTranslationSource implements TranslationSource {
     const { getRepoZip } = await import("~/assets/shared/battlescribe/github");
     const { convertToJson, isAllowedExtension } = await import("~/assets/shared/battlescribe/bs_convert");
     const { GameSystemFiles } = await import("~/assets/shared/battlescribe/local_game_system");
+    const { getCachedSource, setCachedSource } = await import("./sourceCache");
 
     const [owner, repo] = this.systemId.split("/");
 
-    progress(10, `Connecting to GitHub repository ${owner}/${repo}...`);
+    progress(5, `Checking cache for ${owner}/${repo}...`);
+
+    // Use HEAD for now (like before) - cache will prevent re-downloading
+    const releaseTag = "HEAD";
+
+    // Check cache
+    progress(10, "Checking cache...");
+    const cached = await getCachedSource(owner || "", repo || "");
+    if (cached && cached.releaseTag === releaseTag) {
+      progress(50, `Loading from cache (${releaseTag})...`);
+      const gameSystem = new GameSystemFiles();
+
+      // Restore from cached data
+      if (cached.data.gameSystem) {
+        await gameSystem.setSystem(cached.data.gameSystem);
+      }
+      if (cached.data.catalogues) {
+        for (const catalogue of cached.data.catalogues) {
+          await gameSystem.setCatalogue(catalogue as any);
+        }
+      }
+
+      progress(100, "Loaded from cache");
+      this.system = gameSystem;
+      return;
+    }
+
+    progress(15, `Downloading ${releaseTag} from GitHub...`);
 
     const gameSystem = new GameSystemFiles();
 
     progress(20, "Downloading repository files...");
-    const zipEntries = await getRepoZip(owner || "", repo || "");
+    const zipEntries = await getRepoZip(owner || "", repo || "", releaseTag);
 
     progress(40, "Processing game system files...");
 
@@ -117,25 +145,40 @@ export class BSDataTranslationSource implements TranslationSource {
 
       if (data.gameSystem) {
         await gameSystem.setSystem(data);
-        progress(40 + Math.floor((processedFiles / totalFiles) * 50), `Loading ${data.gameSystem.name}...`);
+        progress(40 + Math.floor((processedFiles / totalFiles) * 45), `Loading ${data.gameSystem.name}...`);
       } else if (data.catalogue) {
         await gameSystem.setCatalogue(data);
       }
 
       processedFiles++;
-      // Update progress between 40-90%
-      progress(40 + Math.floor((processedFiles / totalFiles) * 50));
+      // Update progress between 40-85%
+      progress(40 + Math.floor((processedFiles / totalFiles) * 45));
     }
 
-    progress(95, "Finalizing...");
+    progress(90, "Caching for future use...");
+
+    // Cache the loaded system
+    try {
+      await setCachedSource(owner || "", repo || "", releaseTag, {
+        gameSystem: gameSystem.gameSystem,
+        catalogues: Object.values(gameSystem.catalogueFiles),
+      });
+    } catch (e) {
+      console.warn("Failed to cache system:", e);
+    }
+
+    progress(100, "Ready!");
     this.system = gameSystem;
   }
 
   private async loadLocalSystem(progress: (progress: number, message?: string) => void): Promise<void> {
     progress(10, "Loading local system...");
 
-    // Get local systems from storage
-    const localSystemsJson = localStorage.getItem("local_systems") || "[]";
+    // Get local systems from storage - try new format first, fallback to old
+    let localSystemsJson = localStorage.getItem("nr-translation-local-systems");
+    if (!localSystemsJson) {
+      localSystemsJson = localStorage.getItem("local_systems") || "[]";
+    }
     const localSystems = JSON.parse(localSystemsJson);
 
     const localSystem = localSystems.find((s: any) => s.id === this.systemId);
@@ -149,12 +192,20 @@ export class BSDataTranslationSource implements TranslationSource {
     // Create GameSystemFiles instance from stored data
     this.system = new GameSystemFiles();
 
-    if (localSystem.gameSystem) {
-      await this.system.setSystem(localSystem.gameSystem);
+    // Handle both old and new format
+    const systemData = localSystem.data || localSystem;
+
+    if (systemData.gameSystem) {
+      await this.system.setSystem(systemData.gameSystem);
     }
 
-    if (localSystem.catalogues) {
-      for (const catalogue of Object.values(localSystem.catalogues)) {
+    if (systemData.catalogues) {
+      // New format: array, Old format: object
+      const catalogues = Array.isArray(systemData.catalogues)
+        ? systemData.catalogues
+        : Object.values(systemData.catalogues);
+
+      for (const catalogue of catalogues) {
         await this.system.setCatalogue(catalogue);
       }
     }

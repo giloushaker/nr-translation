@@ -1,6 +1,11 @@
 <template>
   <div class="container">
-    <h1>Load Game System</h1>
+    <div class="header">
+      <h1>Load Game System</h1>
+      <button @click="refreshDataSource" class="refresh-btn" title="Clear cached data and force re-download from GitHub">
+        🔄 Refresh Data Sources
+      </button>
+    </div>
 
     <!-- Quick Select Repositories -->
     <div class="input-section">
@@ -374,6 +379,18 @@ const loadFromUrl = async () => {
   }
 };
 
+// Refresh data sources (clear cache)
+const refreshDataSource = async () => {
+  try {
+    const { clearAllCache } = await import("~/stores/translationSources/sourceCache");
+    await clearAllCache();
+    alert("✅ Cache cleared! Next load will fetch fresh data from GitHub.");
+  } catch (e) {
+    console.error("Failed to clear cache:", e);
+    alert("❌ Failed to clear cache. Check console for details.");
+  }
+};
+
 // Initialize
 onMounted(() => {
   loadLocalSystems();
@@ -386,6 +403,28 @@ onMounted(() => {
   max-width: 800px;
   margin: 0 auto;
   padding: 2rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.refresh-btn {
+  padding: 0.5rem 1rem;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.refresh-btn:hover {
+  background-color: #5a6268;
 }
 
 .input-section {
@@ -452,7 +491,7 @@ button:disabled {
 }
 
 h1 {
-  margin-bottom: 2rem;
+  margin: 0;
 }
 
 h2 {
