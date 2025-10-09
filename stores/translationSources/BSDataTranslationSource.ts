@@ -38,17 +38,18 @@ export class BSDataTranslationSource implements TranslationSource {
     const catalogueList: TranslationCatalogue[] = [];
     const allTranslations: TranslationString[] = [];
 
-    Object.entries(rawStrings).forEach(([catalogueName, stringSet]) => {
+    Object.entries(rawStrings).forEach(([catalogueName, translatableSet]) => {
       const strings: TranslationString[] = [];
 
-      Array.from(stringSet).forEach((str, index) => {
+      Array.from(translatableSet).forEach((translatable, index) => {
         const translationString: TranslationString = {
           id: `${catalogueName}-${index}`,
-          key: str,
-          original: str,
+          key: translatable.text,
+          original: translatable.text,
           translation: "",
           translated: false,
           catalogue: catalogueName,
+          type: translatable.type || "other",
         };
 
         strings.push(translationString);
@@ -58,16 +59,60 @@ export class BSDataTranslationSource implements TranslationSource {
       catalogueList.push({
         id: catalogueName,
         name: catalogueName,
-        stringCount: stringSet.size,
+        stringCount: translatableSet.size,
         strings: strings,
       });
     });
 
-    return {
-      strings: rawStrings,
+    // Convert ITranslatable Set to string Set for compatibility
+    const stringSet: Record<string, Set<string>> = {};
+    Object.entries(rawStrings).forEach(([catalogueName, translatableSet]) => {
+      stringSet[catalogueName] = new Set(Array.from(translatableSet).map(t => t.text));
+    });
+
+    // Log the translation source JSON for debugging
+    const result = {
+      strings: stringSet,
       catalogues: catalogueList,
       translations: allTranslations,
     };
+
+    // Group translations by type for better analysis
+    const byType: Record<string, TranslationString[]> = {};
+    allTranslations.forEach((t) => {
+      const type = t.type || "other";
+      if (!byType[type]) byType[type] = [];
+      byType[type].push(t);
+    });
+
+    console.log("📝 Translation Source JSON:", {
+      systemId: this.systemId,
+      totalCatalogues: catalogueList.length,
+      totalTranslations: allTranslations.length,
+      typeBreakdown: Object.fromEntries(
+        Object.entries(byType).map(([type, items]) => [type, items.length])
+      ),
+      examplesByType: Object.fromEntries(
+        Object.entries(byType).map(([type, items]) => [
+          type,
+          items.slice(0, 5).map(t => ({ key: t.key, catalogue: t.catalogue }))
+        ])
+      ),
+      catalogueSummary: catalogueList.map((c) => ({
+        name: c.name,
+        stringCount: c.stringCount,
+      })),
+      sampleTranslations: allTranslations.slice(0, 10),
+      fullJSON: JSON.stringify(result, (_key, value) => {
+        // Convert Set to Array for JSON serialization
+        if (value instanceof Set) {
+          return Array.from(value);
+        }
+        return value;
+      }, 2),
+    });
+
+    return result;
   }
 
   private async loadSystem(progressCallback?: (progress: number, message?: string) => void): Promise<void> {

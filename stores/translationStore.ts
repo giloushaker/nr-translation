@@ -1,6 +1,18 @@
 import { defineStore } from "pinia";
-import { TranslationBackend, NoOpBackend, FileBackend, GithubBackend } from "./translationBackends";
+import { toRaw } from "vue";
+import { TranslationBackend, FileBackend } from "./translationBackends";
 import { type TranslationSource } from "./translationSources";
+
+export type TranslationStringType =
+  | "unit"        // Unit entry (isUnit() === true)
+  | "option"      // Other entries (not units)
+  | "profileName" // Name of a profile
+  | "profile"     // Profile field/stat
+  | "ruleName"    // Name of a rule
+  | "rule"        // Rule content
+  | "category"    // Category name
+  | "faction"     // Faction name
+  | "other";      // Other strings
 
 export interface TranslationString {
   id: string;
@@ -9,6 +21,7 @@ export interface TranslationString {
   translation: string;
   translated: boolean;
   catalogue: string;
+  type?: TranslationStringType;
   modified?: boolean;
 }
 
@@ -111,17 +124,11 @@ export const useTranslationStore = defineStore("translation", {
       const index = store.index(indexName);
 
       return new Promise((resolve, reject) => {
-        const results: any[] = [];
-        const request = index.openCursor(IDBKeyRange.only(value));
+        // Use getAll() instead of cursor for much better performance
+        const request = index.getAll(IDBKeyRange.only(value));
 
-        request.onsuccess = (event) => {
-          const cursor = (event.target as IDBRequest).result;
-          if (cursor) {
-            results.push(cursor.value);
-            cursor.continue();
-          } else {
-            resolve(results);
-          }
+        request.onsuccess = () => {
+          resolve(request.result || []);
         };
 
         request.onerror = () => reject(request.error);
@@ -226,51 +233,70 @@ export const useTranslationStore = defineStore("translation", {
       console.log("📖 Loading from IndexedDB:", { systemId, languageCode, systemLanguageKey });
 
       try {
+        const startTime = performance.now();
+
         // Get all saved translations for this system-language
         const savedTranslations = await this.dbGetByIndex("systemLanguage", systemLanguageKey);
-        console.log("📖 Found saved translations:", savedTranslations.length);
+        console.log(`📖 Found ${savedTranslations.length} saved translations (${Math.round(performance.now() - startTime)}ms)`);
 
         if (savedTranslations.length === 0) {
           console.log("📖 No saved translations found");
           return false;
         }
 
-        console.log("📖 Saved translations sample:", savedTranslations.slice(0, 3));
+        const mapStartTime = performance.now();
+        // Build index map of translations by key OUTSIDE reactive context
+        const translationsByKey = new Map<string, number>();
+        const translationsLength = this.translations.length;
+        for (let i = 0; i < translationsLength; i++) {
+          translationsByKey.set(this.translations[i].key, i);
+        }
+        console.log(`📖 Built translation index: ${translationsLength} items (${Math.round(performance.now() - mapStartTime)}ms)`);
 
-        // Restore translations to current state - optimized with Map lookups
-        const translationMap = new Map(this.translations.map((t) => [t.key, t]));
-        console.log("📖 Current translations in memory:", this.translations.length);
+        const restoreStartTime = performance.now();
 
-        let restoredCount = 0;
-        savedTranslations.forEach((savedTranslation) => {
-          const current = translationMap.get(savedTranslation.key);
-          if (current) {
-            console.log("📖 Restoring translation:", {
-              key: savedTranslation.key,
-              oldTranslation: current.translation,
-              newTranslation: savedTranslation.translation,
+        // Prepare updates array - only process the 17 saved translations
+        const updates: Array<{ index: number; translation: string; modified: boolean }> = [];
+        const savedLength = savedTranslations.length;
+        for (let i = 0; i < savedLength; i++) {
+          const saved = savedTranslations[i];
+          const idx = translationsByKey.get(saved.key);
+          if (idx !== undefined) {
+            updates.push({
+              index: idx,
+              translation: saved.translation || "",
+              modified: saved.modified || false,
             });
-            current.translation = savedTranslation.translation || "";
-            current.translated = true;
-            current.modified = savedTranslation.modified || false;
-            restoredCount++;
-          } else {
-            console.log("📖 Translation key not found in memory:", savedTranslation.key);
           }
-        });
+        }
 
-        console.log("📖 Restored translations:", restoredCount);
+        // Apply all updates by directly modifying the array without going through reactive proxy
+        const patchStartTime = performance.now();
+        console.log(`⏱️ Starting updates with ${updates.length} items...`);
 
-        console.log("📖 Skipping catalogue update during IndexedDB load to prevent freeze...");
-        // NOTE: Catalogues will be updated by the UI components when they render
-        // This prevents the freeze issue with large datasets
-        
-        console.log("📖 Updating translated count...");
-        // Update counts
-        this.translatedCount = this.translations.filter((s) => s.translated).length;
-        console.log("📖 Updated translated count:", this.translatedCount);
+        // Access the raw (non-reactive) array for faster modifications
+        const rawTranslations = toRaw(this.translations);
 
-        console.log("✅ Successfully loaded from IndexedDB");
+        const updateLength = updates.length;
+        for (let i = 0; i < updateLength; i++) {
+          const update = updates[i];
+          const trans = rawTranslations[update.index];
+          if (trans) {
+            trans.translation = update.translation;
+            trans.translated = true;
+            trans.modified = update.modified;
+          }
+        }
+
+        // Update count
+        this.translatedCount = updateLength;
+
+        const patchEndTime = performance.now();
+        console.log(`⏱️ Updates completed in ${Math.round(patchEndTime - patchStartTime)}ms`);
+
+        console.log(`📖 Restored ${updates.length} translations (${Math.round(performance.now() - restoreStartTime)}ms)`);
+
+        console.log(`✅ Successfully loaded from IndexedDB (total: ${Math.round(performance.now() - startTime)}ms)`);
         return true;
       } catch (error) {
         console.error("❌ Failed to load translations from IndexedDB:", error);

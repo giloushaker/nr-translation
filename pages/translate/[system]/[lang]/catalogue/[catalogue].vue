@@ -21,6 +21,15 @@
             <option value="modified">Modified Only</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label for="type-filter">Type:</label>
+          <select id="type-filter" v-model="selectedType" class="filter-select">
+            <option value="all">All Types</option>
+            <option v-for="type in availableTypes" :key="type" :value="type">
+              {{ formatTypeName(type) }} ({{ typeCount(type) }})
+            </option>
+          </select>
+        </div>
         <div class="filter-stats">
           <span class="filter-count">{{ filteredStrings.length }} of {{ catalogueStrings.length }} strings shown</span>
         </div>
@@ -30,6 +39,7 @@
         <div class="strings-table">
           <div class="table-header">
             <div class="col-original">Original Text</div>
+            <div class="col-type">Type</div>
             <div class="col-translation">Translation</div>
             <div class="col-status">Status</div>
             <div class="col-actions">Actions</div>
@@ -43,10 +53,16 @@
             <div class="col-original">
               <div class="original-text">{{ string.original }}</div>
             </div>
+            <div class="col-type">
+              <span class="type-badge" :class="`type-${string.type || 'other'}`">
+                {{ formatTypeName(string.type || 'other') }}
+              </span>
+            </div>
             <div class="col-translation">
               <textarea
-                @change="markAsModified(string)"
-                v-model="string.translation"
+                :value="getTranslationValue(string)"
+                @input="onTranslationInput(string, $event)"
+                @blur="saveTranslation(string)"
                 :placeholder="`Enter ${languageName} translation...`"
                 class="translation-input"
                 rows="2"
@@ -76,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTranslationStore } from "~/stores/translationStore";
 
@@ -86,6 +102,10 @@ const translationStore = useTranslationStore();
 
 // Filter state
 const selectedFilter = ref<string>("all");
+const selectedType = ref<string>("unit");
+
+// Local editing state - store only values being edited
+const editingValues = ref<Map<string, string>>(new Map());
 
 // Get route params
 const catalogueId = computed(() => route.params.catalogue as string);
@@ -127,19 +147,83 @@ const catalogueProgress = computed(() => {
   return total > 0 ? Math.round((translated / total) * 100) : 0;
 });
 
+// Format type names for display
+const formatTypeName = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    unit: "Unit",
+    option: "Option",
+    profileName: "Profile Name",
+    profile: "Profile",
+    ruleName: "Rule Name",
+    rule: "Rule",
+    category: "Category",
+    faction: "Faction",
+    other: "Other",
+  };
+  return typeMap[type] || type;
+};
+
+// Preferred order for types
+const typeOrder = [
+  "unit",
+  "faction",
+  "category",
+  "profileName",
+  "ruleName",
+  "profile",
+  "rule",
+  "option",
+  "other",
+];
+
+// Available types in this catalogue
+const availableTypes = computed(() => {
+  const types = new Set<string>();
+  catalogueStrings.value.forEach((s) => {
+    types.add(s.type || "other");
+  });
+
+  // Sort by predefined order
+  return Array.from(types).sort((a, b) => {
+    const indexA = typeOrder.indexOf(a);
+    const indexB = typeOrder.indexOf(b);
+    // If type not in order array, put at end
+    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
+});
+
+// Count strings by type
+const typeCount = (type: string) => {
+  return catalogueStrings.value.filter((s) => (s.type || "other") === type).length;
+};
+
 // Filter strings
 const filteredStrings = computed(() => {
   return catalogueStrings.value.filter((string) => {
+    // Filter by status
+    let passesStatusFilter = false;
     switch (selectedFilter.value) {
       case "translated":
-        return string.translated;
+        passesStatusFilter = string.translated;
+        break;
       case "untranslated":
-        return !string.translated;
+        passesStatusFilter = !string.translated;
+        break;
       case "modified":
-        return string.modified;
+        passesStatusFilter = string.modified || false;
+        break;
       default:
-        return true;
+        passesStatusFilter = true;
     }
+
+    // Filter by type
+    const passesTypeFilter =
+      selectedType.value === "all" || (string.type || "other") === selectedType.value;
+
+    return passesStatusFilter && passesTypeFilter;
   });
 });
 
@@ -155,8 +239,24 @@ const editString = (string: any) => {
   router.push(`/translate/${encodeURIComponent(systemId)}/${languageCode.value}/${encodeURIComponent(string.key)}`);
 };
 
-const markAsModified = (string: any) => {
-  translationStore.updateTranslation(string.id, string.translation, route.params.system as string, languageCode.value);
+// Get value for textarea - from local state if editing, otherwise from store
+const getTranslationValue = (string: any): string => {
+  return editingValues.value.get(string.id) ?? string.translation ?? "";
+};
+
+// Update local state while typing (no store update)
+const onTranslationInput = (string: any, event: Event) => {
+  const target = event.target as HTMLTextAreaElement;
+  editingValues.value.set(string.id, target.value);
+};
+
+// Save to store when leaving the field
+const saveTranslation = (string: any) => {
+  const value = editingValues.value.get(string.id);
+  if (value !== undefined) {
+    translationStore.updateTranslation(string.id, value, route.params.system as string, languageCode.value);
+    editingValues.value.delete(string.id);
+  }
 };
 
 const toggleTranslationStatus = (string: any) => {
@@ -171,9 +271,23 @@ const toggleTranslationStatus = (string: any) => {
 
 <style scoped>
 .container {
-  max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
+  max-width: 1200px;
+}
+
+@media (min-width: 768px) {
+  .container {
+    padding: 2rem;
+  }
+}
+
+@media (min-width: 1264px) {
+  .container {
+    width: 1200px;
+    padding: 2rem;
+  }
 }
 
 .header {
@@ -259,6 +373,8 @@ const toggleTranslationStatus = (string: any) => {
 .strings-container {
   flex: 1;
   overflow-y: auto;
+  height: 600px;
+  max-height: 70vh;
 }
 
 /* Strings Table */
@@ -271,7 +387,7 @@ const toggleTranslationStatus = (string: any) => {
 
 .table-header {
   display: grid;
-  grid-template-columns: 1fr 1fr 80px 60px;
+  grid-template-columns: 1fr 110px 1fr 80px 60px;
   background: #f8f9fa;
   border-bottom: 2px solid #dee2e6;
   font-weight: 600;
@@ -285,7 +401,7 @@ const toggleTranslationStatus = (string: any) => {
 
 .table-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 80px 60px;
+  grid-template-columns: 1fr 110px 1fr 80px 60px;
   border-bottom: 1px solid #f0f0f0;
   min-height: 40px;
   align-items: center;
@@ -341,12 +457,75 @@ const toggleTranslationStatus = (string: any) => {
   border-right: 1px solid #f0f0f0;
 }
 
+.col-type {
+  padding: 0.375rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #f0f0f0;
+}
+
 .col-translation {
   border-right: 1px solid #f0f0f0;
 }
 
 .col-status {
   border-right: 1px solid #f0f0f0;
+}
+
+.type-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.type-unit {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.type-option {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.type-profileName {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.type-profile {
+  background: #ffe0b2;
+  color: #e65100;
+}
+
+.type-ruleName {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.type-rule {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.type-category {
+  background: #fce4ec;
+  color: #c2185b;
+}
+
+.type-faction {
+  background: #f3e5f5;
+  color: #6a1b9a;
+}
+
+.type-other {
+  background: #eceff1;
+  color: #546e7a;
 }
 
 .edit-button {
