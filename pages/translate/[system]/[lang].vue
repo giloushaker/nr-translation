@@ -10,10 +10,12 @@ import { ref, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useLoadingStore } from "~/stores/loadingStore";
 import { useTranslationStore } from "~/stores/translationStore";
+import { useAuthStore } from "~/stores/authStore";
 
 // Ensure this parent route is also kept alive
 definePageMeta({
   keepalive: true,
+  middleware: "auth",
 });
 
 const route = useRoute();
@@ -48,14 +50,23 @@ const initializeTranslationPage = async () => {
   // Only redirect if we're actually on a translate route but missing parameters
   const isTranslateRoute = route.path.includes("/translate/");
   if (isTranslateRoute && (!systemId || !languageCode)) {
-    console.log("Redirecting to home due to missing params on translate route");
-    await router.push("/");
+    console.log("Redirecting to systems due to missing params on translate route");
+    await router.push("/systems");
     return;
   }
 
   // If we're not on a translate route, don't try to load translation data
   if (!isTranslateRoute) {
     isTranslationDataReady.value = true;
+    return;
+  }
+
+  // Check if user has permission to access this system and language
+  const authStore = useAuthStore();
+  if (!authStore.canTranslateLanguage(systemId, languageCode)) {
+    console.error(`❌ User does not have permission to access system: ${systemId}, language: ${languageCode}`);
+    alert(`You do not have permission to translate this system and language: ${systemId}/${languageCode}`);
+    await router.push("/systems");
     return;
   }
 
@@ -83,8 +94,8 @@ const initializeTranslationPage = async () => {
     isTranslationDataReady.value = true;
   } catch (error) {
     console.error("Failed to initialize translation page:", error);
-    // Handle error - redirect to home if system doesn't exist
-    await router.push("/");
+    // Handle error - redirect to systems if system doesn't exist
+    await router.push("/systems");
   }
 };
 

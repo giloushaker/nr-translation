@@ -57,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "~/stores/authStore";
 
@@ -100,8 +100,8 @@ const handleSubmit = async () => {
     }
 
     if (success) {
-      // Redirect to systems page
-      router.push("/systems");
+      // Redirect to home page
+      router.push("/");
     } else {
       errorMessage.value = isRegistering.value ? "Registration failed" : "Invalid credentials";
     }
@@ -111,13 +111,6 @@ const handleSubmit = async () => {
     isLoading.value = false;
   }
 };
-
-// Redirect if already logged in
-onMounted(() => {
-  if (authStore.isAuthenticated) {
-    router.push("/systems");
-  }
-});
 </script>
 
 <style scoped>

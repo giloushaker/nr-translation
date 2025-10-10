@@ -65,10 +65,12 @@ import { useRoute, useRouter } from "vue-router";
 import { useLoadingStore } from "~/stores/loadingStore";
 import { useTranslationStore } from "~/stores/translationStore";
 import { useStatsStore } from "~/stores/statsStore";
+import { useAuthStore } from "~/stores/authStore";
 
 // Explicitly disable layout for this page to prevent conflicts with translate layout
 definePageMeta({
   layout: false,
+  middleware: "auth",
 });
 
 interface Language {
@@ -86,6 +88,7 @@ const router = useRouter();
 const loadingStore = useLoadingStore();
 const translationStore = useTranslationStore();
 const statsStore = useStatsStore();
+const authStore = useAuthStore();
 const languages = ref<Language[]>([]);
 const systemName = ref("");
 
@@ -119,8 +122,18 @@ const loadSystem = async (systemId: string) => {
 
       updateProgress(80, "Preparing language data...");
 
-      // Convert stats to language format
-      languages.value = Object.values(systemStats.languages).map(convertStatsToLanguage);
+      // Convert stats to language format and filter by permissions
+      const allLanguages = Object.values(systemStats.languages).map(convertStatsToLanguage);
+
+      // Filter languages based on user permissions
+      const authorizedLanguages = authStore.getAuthorizedLanguages(systemId);
+      if (authorizedLanguages === null) {
+        // User has access to all languages (*)
+        languages.value = allLanguages;
+      } else {
+        // Filter to show only authorized languages
+        languages.value = allLanguages.filter((lang) => authorizedLanguages.includes(lang.code));
+      }
 
       updateProgress(100, "Complete!");
 
@@ -140,8 +153,16 @@ const initializeLanguagePage = async () => {
   console.log("Languages page init:", { systemId, path: route.path });
 
   if (!systemId) {
-    console.log("No systemId in languages page, redirecting to home");
-    router.push("/");
+    console.log("No systemId in languages page, redirecting to systems");
+    router.push("/systems");
+    return;
+  }
+
+  // Check if user has permission to access this system
+  if (!authStore.canTranslateSystem(systemId)) {
+    console.error(`❌ User does not have permission to access system: ${systemId}`);
+    alert(`You do not have permission to translate this system: ${systemId}`);
+    router.push("/systems");
     return;
   }
 
@@ -159,7 +180,7 @@ watch(
 );
 
 const goHome = () => {
-  router.push("/");
+  router.push("/systems");
 };
 
 const selectLanguage = (langCode: string) => {

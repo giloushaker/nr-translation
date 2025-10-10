@@ -1,4 +1,5 @@
 import { initDB } from "../util/mongo";
+import { getAuthUser, hasTranslationAuth } from "../utils/auth";
 
 interface TranslationStats {
   systemId: string;
@@ -104,6 +105,27 @@ export default defineEventHandler(async (event) => {
     }
 
     console.log(`📊 Processing stats for ${systemId}`);
+
+    // Check authentication
+    const user = getAuthUser(event);
+
+    if (!user) {
+      console.error(`❌ Unauthorized: No valid JWT token provided`);
+      throw createError({
+        statusCode: 401,
+        statusMessage: "Authentication required",
+      });
+    }
+
+    if (!hasTranslationAuth(user, systemId)) {
+      console.error(`❌ Forbidden: User ${user.login} does not have permission for system ${systemId}`);
+      throw createError({
+        statusCode: 403,
+        statusMessage: `You do not have permission to access stats for system: ${systemId}`,
+      });
+    }
+
+    console.log(`✅ User ${user.login} authorized to fetch stats for system ${systemId}`);
 
     const pipeline = [
       { $match: { systemId } },

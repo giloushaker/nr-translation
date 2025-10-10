@@ -1,6 +1,5 @@
-// import store from "~/server/util/server_store";
-
 import { initDB } from "../util/mongo";
+import { getAuthUser, hasTranslationAuth, hasLanguageAuth } from "../utils/auth";
 
 interface TranslationString {
   id: string;
@@ -73,6 +72,27 @@ export default defineEventHandler(async (event) => {
           `📖 No translations array provided - fetching existing translations for ${systemId}/${languageCode}`
         );
 
+        // Check authentication for fetch
+        const user = getAuthUser(event);
+
+        if (!user) {
+          console.error(`❌ Unauthorized: No valid JWT token provided`);
+          throw createError({
+            statusCode: 401,
+            statusMessage: "Authentication required",
+          });
+        }
+
+        if (!hasLanguageAuth(user, systemId, languageCode)) {
+          console.error(`❌ Forbidden: User ${user.login} does not have permission for system ${systemId} language ${languageCode}`);
+          throw createError({
+            statusCode: 403,
+            statusMessage: `You do not have permission to access translations for system: ${systemId}, language: ${languageCode}`,
+          });
+        }
+
+        console.log(`✅ User ${user.login} authorized to fetch translations for ${systemId}/${languageCode}`);
+
         const documents = await collection
           .find({
             systemId,
@@ -97,6 +117,27 @@ export default defineEventHandler(async (event) => {
       }
 
       console.log(`💾 Uploading ${translations.length} translations for ${systemId}/${languageCode}`);
+
+      // Check authentication for upload
+      const user = getAuthUser(event);
+
+      if (!user) {
+        console.error(`❌ Unauthorized: No valid JWT token provided`);
+        throw createError({
+          statusCode: 401,
+          statusMessage: "Authentication required",
+        });
+      }
+
+      if (!hasLanguageAuth(user, systemId, languageCode)) {
+        console.error(`❌ Forbidden: User ${user.login} does not have permission for system ${systemId} language ${languageCode}`);
+        throw createError({
+          statusCode: 403,
+          statusMessage: `You do not have permission to translate system: ${systemId}, language: ${languageCode}`,
+        });
+      }
+
+      console.log(`✅ User ${user.login} authorized for ${systemId}/${languageCode}`);
 
       const operations = translations.map((translation) => ({
         replaceOne: {
