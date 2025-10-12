@@ -1,11 +1,7 @@
 <template>
   <div class="container">
     <!-- Export Dialog -->
-    <ExportDialog
-      :show="showExportDialog"
-      @close="showExportDialog = false"
-      @export="handleExport"
-    />
+    <ExportDialog :show="showExportDialog" @close="showExportDialog = false" @export="handleExport" />
 
     <!-- Sync Dialog -->
     <SyncDialog
@@ -21,30 +17,26 @@
       @resolve-conflicts="handleConflictResolution"
     />
 
-    <div class="header">
-      <button @click="goBack" class="back-button">← Back to Languages</button>
-      <h1>Select Catalogue to Translate</h1>
-      <div class="header-stats">
-        <span>{{ translatedCount }}/{{ totalStrings }} total translated</span>
-      </div>
-      <div class="header-actions">
+    <PageHeader
+      :breadcrumbs="breadcrumbs"
+      title="Catalogues"
+      :subtitle="`${languageName} (${languageCode})`"
+      :stats="`${translatedCount}/${totalStrings} total translated`"
+    >
+      <template #actions>
         <button
           @click="showSyncDialog = true"
-          class="sync-button"
+          class="btn-primary"
           :disabled="isSyncing"
           :title="hasBackend ? 'Sync translations from backend' : 'Import translations from file'"
         >
-          {{ isSyncing ? 'Syncing...' : 'Sync Translations' }}
+          {{ isSyncing ? "Syncing..." : "Sync Translations" }}
         </button>
-        <button
-          @click="showExportDialog = true"
-          class="export-button"
-          title="Export translations to file"
-        >
+        <button @click="showExportDialog = true" class="btn-success" title="Export translations to file">
           Export Translations
         </button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <div class="catalogues-grid" v-if="catalogues.length > 0">
       <div
@@ -98,6 +90,7 @@ import { useTranslationStore, type ExportFormat } from "~/stores/translationStor
 import { useStatsStore } from "~/stores/statsStore";
 import SyncDialog from "~/components/SyncDialog.vue";
 import ExportDialog from "~/components/ExportDialog.vue";
+import PageHeader from "~/components/PageHeader.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -139,10 +132,24 @@ const languageName = computed(() => {
   return languageNames[languageCode.value] || languageCode.value;
 });
 
-const goBack = () => {
+// Breadcrumb navigation
+const breadcrumbs = computed(() => {
   const systemId = route.params.system as string;
-  router.push(`/languages/${encodeURIComponent(systemId)}`);
-};
+  return [
+    {
+      label: "Systems",
+      onClick: () => router.push("/systems"),
+    },
+    {
+      label: languageName.value,
+      onClick: () => router.push(`/languages/${encodeURIComponent(systemId)}`),
+    },
+    {
+      label: "Catalogues",
+      onClick: () => {},
+    },
+  ];
+});
 
 const selectCatalogue = (catalogueId: string) => {
   const systemId = route.params.system as string;
@@ -239,22 +246,21 @@ const handleSyncSubmit = async (data: {
     syncSummary.value = {
       received: result.received || 0,
       uploaded: result.uploaded || 0,
-      conflicts: result.resolvedConflicts || 0
+      conflicts: result.resolvedConflicts || 0,
     };
 
     // Don't close dialog - show summary instead
     // showSyncDialog.value = false;
-    
   } catch (error: any) {
     console.error("Failed to sync translations:", error);
-    
+
     // Show user notification for errors
     if (globalThis.notify) {
       globalThis.notify({
-        title: 'Sync Failed',
-        text: error.message || 'Unknown error occurred',
-        type: 'error',
-        duration: 5000
+        title: "Sync Failed",
+        text: error.message || "Unknown error occurred",
+        type: "error",
+        duration: 5000,
       });
     } else {
       alert("Failed to sync translations: " + error.message);
@@ -262,17 +268,16 @@ const handleSyncSubmit = async (data: {
   }
 };
 
-const handleConflictResolution = async (resolutions: Array<{ key: string; choice: 'local' | 'server'; server: string }>) => {
+const handleConflictResolution = async (
+  resolutions: Array<{ key: string; choice: "local" | "server"; server: string }>
+) => {
   try {
     // Apply the conflict resolutions
     translationStore.resolveConflicts(resolutions);
-    
+
     // Complete the sync process by saving and uploading
-    await translationStore.saveTranslationsToLocal(
-      route.params.system as string, 
-      languageCode.value
-    );
-    
+    await translationStore.saveTranslationsToLocal(route.params.system as string, languageCode.value);
+
     // Upload any remaining local changes
     // Use the complete server translation set from the initial sync, not just conflicted keys
     await translationStore.uploadLocalTranslationsToServer(
@@ -280,38 +285,37 @@ const handleConflictResolution = async (resolutions: Array<{ key: string; choice
       languageCode.value,
       serverTranslationsFromSync.value
     );
-    
+
     // Update stats cache with new translation counts
     statsStore.updateTranslationCount(
       route.params.system as string,
       languageCode.value,
       translationStore.translatedCount
     );
-    
+
     // Clear conflicts and show summary
     const resolvedCount = resolutions.length;
     const uploadedCount = translationStore.getLastUploadCount();
-    
+
     syncConflicts.value = [];
     selectedFile.value = null;
     serverTranslationsFromSync.value = new Set();
-    
+
     // Show completion summary
     syncSummary.value = {
       received: resolvedCount,
       uploaded: uploadedCount,
-      conflicts: resolvedCount
+      conflicts: resolvedCount,
     };
-    
   } catch (error: any) {
     console.error("Failed to resolve conflicts:", error);
-    
+
     if (globalThis.notify) {
       globalThis.notify({
-        title: 'Conflict Resolution Failed',
-        text: error.message || 'Unknown error occurred',
-        type: 'error',
-        duration: 5000
+        title: "Conflict Resolution Failed",
+        text: error.message || "Unknown error occurred",
+        type: "error",
+        duration: 5000,
       });
     } else {
       alert("Failed to resolve conflicts: " + error.message);
@@ -338,89 +342,6 @@ const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onl
   width: 1200px;
   margin: 0 auto;
   padding: 2rem;
-}
-
-.header {
-  background: #f8f9fa;
-  padding: 1.5rem 2rem;
-  border-bottom: 1px solid #dee2e6;
-  border-radius: 8px 8px 0 0;
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-  margin-bottom: 2rem;
-}
-
-.back-button {
-  padding: 0.5rem 1rem;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.back-button:hover {
-  background: #f0f0f0;
-}
-
-.header h1 {
-  margin: 0;
-  font-size: 1.75rem;
-  flex: 1;
-}
-
-.header-stats {
-  color: #666;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.header-actions {
-  margin-left: auto;
-}
-
-.sync-button {
-  padding: 0.5rem 1rem;
-  background: #17a2b8;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.sync-button:hover:not(:disabled) {
-  background: #138496;
-}
-
-.sync-button:disabled {
-  background: #6c757d;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.sync-button:disabled:hover {
-  background: #6c757d;
-  transform: none;
-}
-
-.export-button {
-  padding: 0.5rem 1rem;
-  background: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-  margin-left: 0.75rem;
-}
-
-.export-button:hover {
-  background: #1e7e34;
 }
 
 .catalogues-grid {

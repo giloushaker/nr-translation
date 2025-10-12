@@ -1,29 +1,40 @@
 <template>
-  <div class="admin-container">
-    <div class="header">
+  <div class="container">
+    <div class="page-header">
       <h1>User Permissions Management</h1>
-      <div class="header-actions">
-        <button @click="goHome" class="back-btn">← Back to Systems</button>
-        <button @click="refreshUsers" class="refresh-btn">🔄 Refresh</button>
+      <div class="page-actions">
+        <button @click="goHome" class="btn">← Back to Systems</button>
       </div>
     </div>
 
-    <div v-if="loading" class="loading">Loading users...</div>
-    <div v-if="error" class="error">{{ error }}</div>
+    <div class="search-section">
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Search users by login (min 2 characters)..."
+        class="form-input"
+        @input="debounceSearch"
+      />
+      <div v-if="users.length > 0" class="search-info">Found {{ users.length }} user(s)</div>
+      <div v-if="!loading && searchQuery.length > 0 && searchQuery.length < 2" class="text-muted">
+        Please enter at least 2 characters
+      </div>
+    </div>
+
+    <div v-if="loading" class="text-center text-muted" style="padding: 2rem">Searching...</div>
+    <div v-if="error" class="alert-error">{{ error }}</div>
 
     <div v-if="!loading && users.length > 0" class="users-list">
-      <div v-for="user in users" :key="user._id" class="user-card">
-        <div class="user-header">
+      <div v-for="user in users" :key="user._id" class="card">
+        <div class="card-header">
           <h2>
             {{ user.login }}
-            <span v-if="user.permission === 100" class="admin-badge">Admin</span>
+            <span v-if="user.permission === 100" class="badge-warning">Admin</span>
           </h2>
-          <button v-if="editingUser !== user._id" @click="startEditing(user)" class="edit-btn">
-            ✏️ Edit Permissions
-          </button>
+          <button v-if="editingUser !== user._id" @click="startEditing(user)" class="btn"> Edit Permissions </button>
           <div v-else class="edit-actions">
-            <button @click="savePermissions(user)" class="save-btn">💾 Save</button>
-            <button @click="cancelEditing" class="cancel-btn">❌ Cancel</button>
+            <button @click="savePermissions(user)" class="btn-success">Save</button>
+            <button @click="cancelEditing" class="btn-secondary">Cancel</button>
           </div>
         </div>
 
@@ -32,13 +43,11 @@
 
           <!-- Display mode -->
           <div v-if="editingUser !== user._id" class="permissions-display">
-            <div v-if="user.translation_auth.length === 0" class="no-permissions">
-              No permissions assigned
-            </div>
+            <div v-if="user.translation_auth.length === 0" class="text-muted"> No permissions assigned </div>
             <div v-for="perm in user.translation_auth" :key="perm.systemId" class="permission-item">
               <strong>{{ perm.systemId }}</strong>
               <span class="languages-list">
-                Languages: {{ perm.languages.includes('*') ? 'All (*)' : perm.languages.join(', ') }}
+                Languages: {{ perm.languages.includes("*") ? "All (*)" : perm.languages.join(", ") }}
               </span>
             </div>
           </div>
@@ -46,9 +55,9 @@
           <!-- Edit mode -->
           <div v-else class="permissions-edit">
             <div v-for="(perm, index) in editingPermissions" :key="index" class="edit-permission-item">
-              <div class="system-select">
-                <label>System:</label>
-                <select v-model="perm.systemId">
+              <div class="form-group">
+                <label class="form-label">System:</label>
+                <select v-model="perm.systemId" class="form-select">
                   <option value="">Select system...</option>
                   <option value="newrecruit">NewRecruit</option>
                   <option value="BSData/wh40k-10e">Warhammer 40k 10th Edition</option>
@@ -60,37 +69,33 @@
                 </select>
               </div>
 
-              <div class="languages-select">
-                <label>Languages (comma-separated, or * for all):</label>
-                <input
-                  v-model="perm.languagesInput"
-                  type="text"
-                  placeholder="fr, es, de or *"
-                />
+              <div class="form-group">
+                <label class="form-label">Languages (comma-separated, or * for all):</label>
+                <input v-model="perm.languagesInput" type="text" class="form-input" placeholder="fr, es, de or *" />
               </div>
 
-              <button @click="removePermission(index)" class="remove-perm-btn">🗑️ Remove</button>
+              <button @click="removePermission(index)" class="btn-danger btn-sm">Remove</button>
             </div>
 
-            <button @click="addPermission" class="add-perm-btn">➕ Add System Permission</button>
+            <button @click="addPermission" class="btn-primary">Add System Permission</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-if="!loading && users.length === 0" class="no-users">
-      No users found
+    <div v-if="!loading && searchQuery.length >= 2 && users.length === 0" class="text-center text-muted" style="padding: 2rem">
+      No users found matching "{{ searchQuery }}"
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore, type SystemPermission } from '~/stores/authStore';
+import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { useAuthStore, type SystemPermission } from "~/stores/authStore";
 
 definePageMeta({
-  middleware: ['auth', 'admin'],
+  middleware: ["auth", "admin"],
 });
 
 interface User {
@@ -110,54 +115,80 @@ const authStore = useAuthStore();
 
 const users = ref<User[]>([]);
 const loading = ref(false);
-const error = ref('');
+const error = ref("");
 const editingUser = ref<string | null>(null);
 const editingPermissions = ref<EditablePermission[]>([]);
+const searchQuery = ref("");
+
+let searchTimeout: NodeJS.Timeout | null = null;
 
 // Check if current user is admin
 onMounted(async () => {
   if (!authStore.isAdmin) {
-    alert('Admin access required');
-    router.push('/systems');
+    alert("Admin access required");
+    router.push("/systems");
     return;
   }
-  await loadUsers();
+  // Don't load users on mount, wait for search
 });
 
 const loadUsers = async () => {
+  if (searchQuery.value.length < 2) {
+    users.value = [];
+    return;
+  }
+
   loading.value = true;
-  error.value = '';
+  error.value = "";
 
   try {
     const config = useRuntimeConfig();
-    const baseURL = config.public.apiUrl || 'http://localhost:3005';
+    const baseURL = config.public.apiUrl || "";
+    const token = authStore.getToken;
 
-    const response = await $fetch<{ success: boolean; users: User[] }>(
-      `${baseURL}/api/admin/users`,
+    console.log(`🔍 Searching users with query: "${searchQuery.value}"`);
+
+    const response = await $fetch<{ success: boolean; users: User[]; message?: string }>(
+      `${baseURL}/api/admin/users?search=${encodeURIComponent(searchQuery.value)}`,
       {
         headers: {
-          Authorization: `Bearer ${authStore.getToken}`,
+          Authorization: `Bearer ${token}`,
         },
       }
     );
 
+    console.log("📦 Response received:", response);
+
     if (response.success) {
       users.value = response.users;
+      console.log("✅ Found", users.value.length, "users");
+    } else {
+      error.value = response.message || "API returned success=false";
     }
   } catch (err: any) {
-    error.value = err.message || 'Failed to load users';
-    console.error('Failed to load users:', err);
+    console.error("❌ Failed to search users:", err);
+    console.error("❌ Error data:", err.data);
+    error.value = err.data?.statusMessage || err.message || "Failed to search users";
   } finally {
     loading.value = false;
   }
 };
 
+const debounceSearch = () => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+  }
+  searchTimeout = setTimeout(() => {
+    loadUsers();
+  }, 500);
+};
+
 const startEditing = (user: User) => {
   editingUser.value = user._id;
-  editingPermissions.value = user.translation_auth.map(perm => ({
+  editingPermissions.value = user.translation_auth.map((perm) => ({
     systemId: perm.systemId,
     languages: perm.languages,
-    languagesInput: perm.languages.join(', '),
+    languagesInput: perm.languages.join(", "),
   }));
 };
 
@@ -168,9 +199,9 @@ const cancelEditing = () => {
 
 const addPermission = () => {
   editingPermissions.value.push({
-    systemId: '',
+    systemId: "",
     languages: [],
-    languagesInput: '*',
+    languagesInput: "*",
   });
 };
 
@@ -182,23 +213,23 @@ const savePermissions = async (user: User) => {
   try {
     // Convert languagesInput strings to arrays
     const translation_auth: SystemPermission[] = editingPermissions.value
-      .filter(perm => perm.systemId) // Only include permissions with a system selected
-      .map(perm => ({
+      .filter((perm) => perm.systemId) // Only include permissions with a system selected
+      .map((perm) => ({
         systemId: perm.systemId,
         languages: perm.languagesInput
-          .split(',')
-          .map(lang => lang.trim())
-          .filter(lang => lang.length > 0),
+          .split(",")
+          .map((lang) => lang.trim())
+          .filter((lang) => lang.length > 0),
       }));
 
     const config = useRuntimeConfig();
-    const baseURL = config.public.apiUrl || 'http://localhost:3005';
+    const baseURL = config.public.apiUrl || "";
 
     await $fetch(`${baseURL}/api/admin/users`, {
-      method: 'PUT',
+      method: "PUT",
       headers: {
         Authorization: `Bearer ${authStore.getToken}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: {
         userId: user._id,
@@ -206,153 +237,41 @@ const savePermissions = async (user: User) => {
       },
     });
 
-    alert('Permissions updated successfully!');
+    alert("Permissions updated successfully!");
     editingUser.value = null;
     editingPermissions.value = [];
-    await loadUsers();
+    await loadUsers(); // Reload automatically after save
   } catch (err: any) {
     alert(`Failed to save permissions: ${err.message}`);
-    console.error('Failed to save permissions:', err);
+    console.error("Failed to save permissions:", err);
   }
 };
 
-const refreshUsers = () => {
-  loadUsers();
-};
-
 const goHome = () => {
-  router.push('/systems');
+  router.push("/systems");
 };
 </script>
 
 <style scoped>
-.admin-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.search-section {
   margin-bottom: 2rem;
 }
 
-.header-actions {
-  display: flex;
-  gap: 1rem;
+.search-section .form-input {
+  width: 100%;
+  margin-bottom: 0.5rem;
 }
 
-.back-btn,
-.refresh-btn {
-  padding: 0.5rem 1rem;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-}
-
-.back-btn:hover,
-.refresh-btn:hover {
-  background: #fff;
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-}
-
-.loading,
-.error,
-.no-users {
-  text-align: center;
-  padding: 2rem;
+.search-info {
+  font-size: 0.875rem;
   color: #666;
-}
-
-.error {
-  color: #dc3545;
-  background: #f8d7da;
-  border-radius: 4px;
+  margin-top: 0.5rem;
 }
 
 .users-list {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-}
-
-.user-card {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 1.5rem;
-}
-
-.user-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #eee;
-}
-
-.user-header h2 {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.admin-badge {
-  background: #ffc107;
-  color: #000;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: bold;
-}
-
-.edit-btn,
-.save-btn,
-.cancel-btn {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.edit-btn {
-  background: #fff;
-  color: #333;
-}
-
-.edit-btn:hover {
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-}
-
-.save-btn {
-  background: #28a745;
-  color: white;
-  border-color: #28a745;
-}
-
-.save-btn:hover {
-  background: #218838;
-}
-
-.cancel-btn {
-  background: #6c757d;
-  color: white;
-  border-color: #6c757d;
-}
-
-.cancel-btn:hover {
-  background: #5a6268;
 }
 
 .edit-actions {
@@ -371,11 +290,6 @@ const goHome = () => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-}
-
-.no-permissions {
-  color: #999;
-  font-style: italic;
 }
 
 .permission-item {
@@ -410,61 +324,5 @@ const goHome = () => {
   grid-template-columns: 1fr 1fr auto;
   gap: 1rem;
   align-items: end;
-}
-
-.system-select,
-.languages-select {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.system-select label,
-.languages-select label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #666;
-}
-
-.system-select select,
-.languages-select input {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-.remove-perm-btn {
-  padding: 0.5rem 1rem;
-  background: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-
-.remove-perm-btn:hover {
-  background: #c82333;
-}
-
-.add-perm-btn {
-  padding: 0.75rem 1rem;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: background 0.2s;
-}
-
-.add-perm-btn:hover {
-  background: #0056b3;
-}
-
-h1 {
-  margin: 0;
 }
 </style>

@@ -1,14 +1,16 @@
 <template>
   <div class="container">
-    <div class="header">
-      <button @click="goBack" class="back-button">← Back to Catalogues</button>
-      <div class="header-info">
-        <h1>{{ currentCatalogue?.name || "Loading..." }}</h1>
-        <div class="progress-info">
-          {{ catalogueTranslatedCount }}/{{ catalogueStrings.length }} translated ({{ catalogueProgress }}%)
-        </div>
-      </div>
-    </div>
+    <PageHeader
+      :breadcrumbs="breadcrumbs"
+      :title="currentCatalogue?.name || 'Loading...'"
+      :stats="`${catalogueTranslatedCount}/${catalogueStrings.length} translated (${catalogueProgress}%)`"
+    >
+      <template #actions>
+        <button @click="handleSync" class="btn-primary" :disabled="isSyncing">
+          {{ isSyncing ? "Syncing..." : "Sync Translations" }}
+        </button>
+      </template>
+    </PageHeader>
 
     <div class="content" v-if="currentCatalogue">
       <div class="filter-controls">
@@ -95,6 +97,7 @@
 import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTranslationStore } from "~/stores/translationStore";
+import PageHeader from "~/components/PageHeader.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -110,6 +113,10 @@ const editingValues = ref<Map<string, string>>(new Map());
 // Get route params
 const catalogueId = computed(() => route.params.catalogue as string);
 const languageCode = computed(() => route.params.lang as string);
+const systemId = computed(() => route.params.system as string);
+
+// State
+const isSyncing = ref(false);
 
 // Language mapping
 const languageName = computed(() => {
@@ -126,6 +133,26 @@ const languageName = computed(() => {
   };
   return languageNames[languageCode.value] || languageCode.value;
 });
+
+// Breadcrumb navigation
+const breadcrumbs = computed(() => [
+  {
+    label: "Systems",
+    onClick: () => router.push("/systems"),
+  },
+  {
+    label: languageName.value,
+    onClick: () => router.push(`/languages/${encodeURIComponent(systemId.value)}`),
+  },
+  {
+    label: "Catalogues",
+    onClick: () => router.push(`/translate/${encodeURIComponent(systemId.value)}/${languageCode.value}/catalogues`),
+  },
+  {
+    label: currentCatalogue.value?.name || "...",
+    onClick: () => {},
+  },
+]);
 
 // Current catalogue
 const currentCatalogue = computed(() => {
@@ -229,11 +256,6 @@ const filteredStrings = computed(() => {
 
 // No pagination needed since we're focusing on one catalogue
 
-const goBack = () => {
-  const systemId = route.params.system as string;
-  router.push(`/translate/${encodeURIComponent(systemId)}/${languageCode.value}/catalogues`);
-};
-
 const editString = (string: any) => {
   const systemId = route.params.system as string;
   router.push(`/translate/${encodeURIComponent(systemId)}/${languageCode.value}/${encodeURIComponent(string.key)}`);
@@ -267,6 +289,20 @@ const toggleTranslationStatus = (string: any) => {
     translationStore.updateTranslation(string.id, string.original, route.params.system as string, languageCode.value);
   }
 };
+
+// Sync translations from backend
+const handleSync = async () => {
+  isSyncing.value = true;
+  try {
+    await translationStore.syncFromBackend(systemId.value, languageCode.value);
+    alert("✅ Translations synced successfully!");
+  } catch (error: any) {
+    console.error("Sync failed:", error);
+    alert(`❌ Failed to sync: ${error.message || "Unknown error"}`);
+  } finally {
+    isSyncing.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -288,46 +324,6 @@ const toggleTranslationStatus = (string: any) => {
     width: 1200px;
     padding: 2rem;
   }
-}
-
-.header {
-  background: #f8f9fa;
-  padding: 1.5rem 2rem;
-  border-bottom: 1px solid #dee2e6;
-  border-radius: 8px 8px 0 0;
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-  margin-bottom: 2rem;
-}
-
-.back-button {
-  padding: 0.5rem 1rem;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.back-button:hover {
-  background: #f0f0f0;
-}
-
-.header-info {
-  flex: 1;
-}
-
-.header-info h1 {
-  margin: 0 0 0.25rem 0;
-  font-size: 1.5rem;
-}
-
-.progress-info {
-  color: #666;
-  font-size: 0.875rem;
-  font-weight: 500;
 }
 
 .filter-controls {

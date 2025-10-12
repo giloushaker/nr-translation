@@ -35,7 +35,7 @@ export default defineNuxtConfig({
   typescript: {
     strict: true,
   },
-  css: ["~/style.css"],
+  css: ["~/style.css", "~/assets/styles/main.css"],
 
   vite: { plugins: [(await import("vite-plugin-commonjs")).default()] },
   components: [{ path: "~/shared_components/" }, { path: "~/components/" }],

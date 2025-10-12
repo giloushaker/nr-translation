@@ -25,7 +25,7 @@ export const useAuthStore = defineStore("auth", {
   }),
 
   persist: {
-    storage: typeof window !== 'undefined' ? localStorage : undefined,
+    storage: typeof window !== "undefined" ? localStorage : undefined,
   },
 
   getters: {
@@ -33,25 +33,31 @@ export const useAuthStore = defineStore("auth", {
       return this.token;
     },
 
-    canTranslateSystem: (state) => (systemId: string): boolean => {
-      if (!state.user) return false;
-      return state.user.translation_auth.some((perm) => perm.systemId === systemId);
-    },
+    canTranslateSystem:
+      (state) =>
+      (systemId: string): boolean => {
+        if (!state.user) return false;
+        return state.user.translation_auth.some((perm) => perm.systemId === systemId);
+      },
 
-    canTranslateLanguage: (state) => (systemId: string, languageCode: string): boolean => {
-      if (!state.user) return false;
-      const systemPerm = state.user.translation_auth.find((perm) => perm.systemId === systemId);
-      if (!systemPerm) return false;
-      return systemPerm.languages.includes("*") || systemPerm.languages.includes(languageCode);
-    },
+    canTranslateLanguage:
+      (state) =>
+      (systemId: string, languageCode: string): boolean => {
+        if (!state.user) return false;
+        const systemPerm = state.user.translation_auth.find((perm) => perm.systemId === systemId);
+        if (!systemPerm) return false;
+        return systemPerm.languages.includes("*") || systemPerm.languages.includes(languageCode);
+      },
 
-    getAuthorizedLanguages: (state) => (systemId: string): string[] | null => {
-      if (!state.user) return null;
-      const systemPerm = state.user.translation_auth.find((perm) => perm.systemId === systemId);
-      if (!systemPerm) return null;
-      // Return null if all languages (*), otherwise return the specific list
-      return systemPerm.languages.includes("*") ? null : systemPerm.languages;
-    },
+    getAuthorizedLanguages:
+      (state) =>
+      (systemId: string): string[] | null => {
+        if (!state.user) return null;
+        const systemPerm = state.user.translation_auth.find((perm) => perm.systemId === systemId);
+        if (!systemPerm) return null;
+        // Return null if all languages (*), otherwise return the specific list
+        return systemPerm.languages.includes("*") ? null : systemPerm.languages;
+      },
 
     isAdmin(): boolean {
       return this.user?.permission === 100;
@@ -62,7 +68,7 @@ export const useAuthStore = defineStore("auth", {
     async login(login: string, password: string): Promise<boolean> {
       try {
         const config = useRuntimeConfig();
-        const baseURL = config.public.apiUrl || "http://localhost:3005";
+        const baseURL = config.public.apiUrl || "";
 
         const response = await $fetch<{ success: boolean; token: string; user: User }>(`${baseURL}/api/auth/login`, {
           method: "POST",
@@ -88,15 +94,12 @@ export const useAuthStore = defineStore("auth", {
     async register(login: string, password: string, translation_auth: SystemPermission[] = []): Promise<boolean> {
       try {
         const config = useRuntimeConfig();
-        const baseURL = config.public.apiUrl || "http://localhost:3005";
+        const baseURL = config.public.apiUrl || "";
 
-        const response = await $fetch<{ success: boolean; token: string; user: User }>(
-          `${baseURL}/api/auth/register`,
-          {
-            method: "POST",
-            body: { login, password, translation_auth },
-          }
-        );
+        const response = await $fetch<{ success: boolean; token: string; user: User }>(`${baseURL}/api/auth/register`, {
+          method: "POST",
+          body: { login, password, translation_auth },
+        });
 
         if (response.success && response.token) {
           this.token = response.token;
@@ -109,6 +112,33 @@ export const useAuthStore = defineStore("auth", {
         return false;
       } catch (error: any) {
         console.error("❌ Registration failed:", error);
+        return false;
+      }
+    },
+
+    async refreshPermissions(): Promise<boolean> {
+      try {
+        const config = useRuntimeConfig();
+        const baseURL = config.public.apiUrl || "";
+
+        const response = await $fetch<{ success: boolean; token: string; user: User }>(`${baseURL}/api/auth/refresh`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+          },
+        });
+
+        if (response.success && response.token) {
+          this.token = response.token;
+          this.user = response.user;
+          this.isAuthenticated = true;
+          console.log("✅ Permissions refreshed");
+          return true;
+        }
+
+        return false;
+      } catch (error: any) {
+        console.error("❌ Failed to refresh permissions:", error);
         return false;
       }
     },

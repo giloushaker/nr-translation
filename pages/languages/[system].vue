@@ -4,14 +4,20 @@
 
     <!-- Main content -->
     <div v-if="!loadingStore.isLoading">
-      <div class="header">
-        <button @click="goHome" class="back-button">← Back to Home</button>
-        <h1>Select Language</h1>
-        <div v-if="systemName" class="system-info"> System: {{ systemName }} </div>
-      </div>
+      <PageHeader
+        :breadcrumbs="breadcrumbs"
+        title="Select Language"
+        :subtitle="systemName ? `System: ${systemName}` : undefined"
+      >
+        <template #actions>
+          <button @click="handleSync" class="btn-primary">
+            Sync Translations
+          </button>
+        </template>
+      </PageHeader>
 
-      <div class="languages-grid">
-        <div v-for="lang in languages" :key="lang.code" class="language-card" @click="selectLanguage(lang.code)">
+      <div class="grid-2">
+        <div v-for="lang in languages" :key="lang.code" class="card-interactive" @click="selectLanguage(lang.code)">
           <div class="language-header">
             <h3>{{ lang.name }}</h3>
             <span class="language-code">{{ lang.code }}</span>
@@ -52,7 +58,7 @@
         </div>
       </div>
 
-      <div v-if="languages.length === 0" class="no-languages">
+      <div v-if="languages.length === 0" class="text-center text-muted" style="padding: 4rem 2rem;">
         No languages available. Please load a game system first.
       </div>
     </div>
@@ -60,12 +66,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useLoadingStore } from "~/stores/loadingStore";
 import { useTranslationStore } from "~/stores/translationStore";
 import { useStatsStore } from "~/stores/statsStore";
 import { useAuthStore } from "~/stores/authStore";
+import PageHeader from "~/components/PageHeader.vue";
 
 // Explicitly disable layout for this page to prevent conflicts with translate layout
 definePageMeta({
@@ -91,6 +98,18 @@ const statsStore = useStatsStore();
 const authStore = useAuthStore();
 const languages = ref<Language[]>([]);
 const systemName = ref("");
+
+// Breadcrumb navigation
+const breadcrumbs = computed(() => [
+  {
+    label: "Systems",
+    onClick: () => router.push("/systems"),
+  },
+  {
+    label: "Select Language",
+    onClick: () => {},
+  },
+]);
 
 // Helper function to convert LanguageStats to Language interface
 const convertStatsToLanguage = (stats: any): Language => ({
@@ -187,61 +206,14 @@ const selectLanguage = (langCode: string) => {
   const systemId = route.params.system as string;
   router.push(`/translate/${encodeURIComponent(systemId)}/${langCode}`);
 };
+
+const handleSync = () => {
+  alert("Please select a language first to sync translations");
+};
 </script>
 
 <style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.header {
-  margin-bottom: 2rem;
-  text-align: center;
-  position: relative;
-}
-
-.back-button {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-
-  padding: 0.5rem 1rem;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.system-info {
-  color: #666;
-  margin-top: 0.5rem;
-}
-
-.languages-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
-}
-
-.language-card {
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 1.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.language-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
+/* Unique language card layout */
 .language-header {
   display: flex;
   justify-content: space-between;
@@ -333,16 +305,5 @@ const selectLanguage = (langCode: string) => {
   font-size: 0.75rem;
   color: #666;
   margin-top: 0.25rem;
-}
-
-.no-languages {
-  text-align: center;
-  padding: 4rem 2rem;
-  color: #666;
-}
-
-h1 {
-  margin: 0;
-  font-size: 2rem;
 }
 </style>

@@ -22,7 +22,7 @@
     "gh-pages": "^6.3.0",
     "nuxt": "^4.0.0",
     "nuxt-windicss": "^3.0.1",
-    "sass": "^1.89.2",
+    "sass": "^1.93.2",
     "vite": "^7.0.5",
     "vite-plugin-commonjs": "^0.10.4"
   },

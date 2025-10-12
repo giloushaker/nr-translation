@@ -1,39 +1,38 @@
 <template>
   <div class="container">
-    <div class="header">
-      <h1>Load Game System</h1>
-      <div class="header-actions">
-        <span v-if="authStore.user" class="user-info">{{ authStore.user.login }}</span>
-        <button
-          @click="refreshDataSource"
-          class="refresh-btn"
-          title="Clear cached data and force re-download from GitHub"
-        >
-          🔄 Refresh Data Sources
+    <div class="page-header">
+      <h1>Game Systems</h1>
+      <div class="page-actions">
+        <span v-if="authStore.user" class="user-info text-muted">{{ authStore.user.login }}</span>
+
+        <button @click="refreshDataSource" class="btn" title="Clear cached data and force re-download from GitHub">
+          🔄 Refresh Data
         </button>
-        <button @click="handleLogout" class="logout-btn"> Logout </button>
+        <button @click="handleLogout" class="btn-secondary"> Logout </button>
       </div>
     </div>
 
-    <!-- Available Systems -->
-    <div class="input-section">
-      <div class="repo-grid">
-        <div v-for="repo in quickSelectRepos" :key="repo.url" class="repo-card" @click="loadQuickRepo(repo)">
-          <div class="repo-icon">{{ repo.isTranslationSource ? "🌐" : "📁" }}</div>
-          <div class="repo-info">
-            <h3>{{ repo.name }}</h3>
-            <p>{{ repo.description }}</p>
-            <span class="repo-url">{{ repo.displayUrl }}</span>
-          </div>
+    <div class="grid-2">
+      <div
+        v-for="repo in quickSelectRepos"
+        :key="repo.url"
+        class="system-card card-interactive"
+        @click="loadQuickRepo(repo)"
+      >
+        <div class="system-icon">{{ repo.isTranslationSource ? "🌐" : "📁" }}</div>
+        <div class="system-info">
+          <h3>{{ repo.name }}</h3>
+          <p class="text-secondary">{{ repo.description }}</p>
+          <span class="system-url text-muted">{{ repo.displayUrl }}</span>
         </div>
       </div>
     </div>
 
-    <div v-if="error" class="error">
+    <div v-if="error" class="alert-error">
       {{ error }}
     </div>
 
-    <div v-if="loadedSystem" class="success"> Loaded: {{ loadedSystem.name }} </div>
+    <div v-if="loadedSystem" class="alert-success"> Loaded: {{ loadedSystem.name }} </div>
   </div>
 </template>
 
@@ -191,7 +190,8 @@ const loadFromGithub = async () => {
     }
 
     const { githubOwner, githubName } = parseGitHubUrl(normalizedUrl);
-
+    if (!githubOwner) throw "No github owner";
+    if (!githubName) throw "No githubName";
     // Get repository files
     const zipEntries = await getRepoZip(githubOwner, githubName);
 
@@ -365,10 +365,21 @@ const refreshDataSource = async () => {
   try {
     const { clearAllCache } = await import("~/stores/translationSources/sourceCache");
     await clearAllCache();
-    alert("✅ Cache cleared! Next load will fetch fresh data from GitHub.");
+    window.location.reload();
   } catch (e) {
     console.error("Failed to clear cache:", e);
     alert("❌ Failed to clear cache. Check console for details.");
+  }
+};
+
+// Refresh permissions
+const refreshPermissions = async () => {
+  const success = await authStore.refreshPermissions();
+  if (success) {
+    alert("✅ Permissions refreshed! The page will reload.");
+    window.location.reload();
+  } else {
+    alert("❌ Failed to refresh permissions. Please try logging out and back in.");
   }
 };
 
@@ -386,194 +397,39 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
 .user-info {
   font-size: 0.9rem;
-  color: #666;
-  font-weight: normal;
+  margin-right: 0.5rem;
 }
 
-.refresh-btn,
-.logout-btn {
-  padding: 0.5rem 1rem;
-  background: #fff;
-  color: #333;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-}
-
-.refresh-btn:hover,
-.logout-btn:hover {
-  background: #fff;
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-}
-
-.input-section {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-}
-.input-folder {
-  display: flex;
-  justify-content: space-between;
-}
-.input-group {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.url-input {
-  flex: 1;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-
-.file-input {
-  display: none;
-}
-
-button {
-  padding: 0.5rem 1rem;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-
-button:disabled {
-  background-color: #6c757d;
-  cursor: not-allowed;
-}
-
-.error {
-  margin-top: 1rem;
-  padding: 1rem;
-  background-color: #f8d7da;
-  color: #721c24;
-  border-radius: 4px;
-}
-
-.success {
-  margin-top: 1rem;
-  padding: 1rem;
-  background-color: #d4edda;
-  color: #155724;
-  border-radius: 4px;
-}
-
-h1 {
-  margin: 0;
-}
-
-h2 {
-  margin-bottom: 1rem;
-  font-size: 1.2rem;
-}
-
-/* Repository grid styles */
-.repo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem;
-}
-
-.repo-card {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 1rem;
-  cursor: pointer;
-  transition: all 0.2s;
+.system-card {
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  position: relative;
 }
 
-.repo-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-  border-color: #007bff;
-}
-
-.repo-card.local {
-  border-left: 4px solid #28a745;
-}
-
-.repo-icon {
-  font-size: 1.5rem;
+.system-icon {
+  font-size: 2rem;
   flex-shrink: 0;
 }
 
-.repo-info {
+.system-info {
   flex: 1;
 }
 
-.repo-info h3 {
+.system-info h3 {
   margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  color: #333;
+  font-size: 1.1rem;
 }
 
-.repo-info p {
+.system-info p {
   margin: 0 0 0.5rem 0;
   font-size: 0.875rem;
-  color: #666;
   line-height: 1.4;
 }
 
-.repo-url {
+.system-url {
   font-size: 0.75rem;
-  color: #999;
   font-family: monospace;
-}
-
-.remove-btn {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #dc3545;
-  color: white;
-  border: none;
-  font-size: 0.875rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.remove-btn:hover {
-  background: #c82333;
 }
 </style>

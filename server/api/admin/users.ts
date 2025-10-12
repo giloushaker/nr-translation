@@ -36,14 +36,37 @@ export default defineEventHandler(async (event) => {
   const collection = mongo.collection<MemberDocument>("members");
 
   if (event.method === "GET") {
-    // List all users
+    // Search users by login
     try {
+      const query = getQuery(event);
+      const search = (query.search as string) || "";
+
+      if (!search || search.length < 2) {
+        return {
+          success: true,
+          users: [],
+          message: "Please enter at least 2 characters to search",
+        };
+      }
+
+      console.log(`🔍 Searching users with: "${search}"`);
+
+      // Build search filter - case-insensitive regex
+      const filter = {
+        login: { $regex: search, $options: "i" },
+      };
+
+      // Fetch matching users (limit to 100 results)
       const users = await collection
-        .find({})
+        .find(filter)
         .project({ password: 0 }) // Don't send passwords
+        .sort({ login: 1 }) // Sort alphabetically
+        .limit(100)
         .toArray();
 
-      return {
+      console.log(`✅ Found ${users.length} users matching "${search}"`);
+
+      const response = {
         success: true,
         users: users.map((u) => ({
           _id: u._id?.toString(),
@@ -53,11 +76,14 @@ export default defineEventHandler(async (event) => {
           createdAt: u.createdAt,
         })),
       };
+
+      console.log(`📤 Sending response with ${response.users.length} users`);
+      return response;
     } catch (error) {
-      console.error("Failed to list users:", error);
+      console.error("❌ Failed to search users:", error);
       throw createError({
         statusCode: 500,
-        statusMessage: "Failed to list users",
+        statusMessage: "Failed to search users",
       });
     }
   }
@@ -75,10 +101,7 @@ export default defineEventHandler(async (event) => {
         });
       }
 
-      const result = await collection.updateOne(
-        { _id: new ObjectId(userId) },
-        { $set: { translation_auth } }
-      );
+      const result = await collection.updateOne({ _id: new ObjectId(userId) }, { $set: { translation_auth } });
 
       if (result.matchedCount === 0) {
         throw createError({

@@ -41,12 +41,27 @@ function detectStringType(key: string, obj: any, path?: string[]): TranslationSt
         return "faction";
     }
 
-    // Check if we're in a selection entry context
-    if ((parentContext === "selectionEntries" || parentContext === "entryLinks") && key === "name") {
-        // If we're inside a sharedSelectionEntries context, everything is an option
+    // Check if we're in a selection entry context (including sharedSelectionEntries)
+    if ((parentContext === "selectionEntries" || parentContext === "entryLinks" || parentContext === "sharedSelectionEntries") && key === "name") {
+        // Check if this entry has type "model" or "unit" - these are root units
+        if (obj.type === "model" || obj.type === "unit") {
+            console.log("🎯 Found unit (type=model/unit):", obj.name || obj[key], "type:", obj.type, "parent:", parentContext);
+            return "unit";
+        }
+
+        // For entryLinks, check the target's type if available
+        if (parentContext === "entryLinks" && obj.target) {
+            const targetType = obj.target.type;
+            if (targetType === "model" || targetType === "unit") {
+                console.log("🎯 Found unit (link target type=model/unit):", obj.name || obj[key], "target type:", targetType);
+                return "unit";
+            }
+        }
+
+        // If not a unit type, count nesting level for selectionEntries
         const inSharedContext = path.some(p => p === "sharedSelectionEntries");
         if (inSharedContext) {
-            console.log("🔗 Found entry in shared context:", obj.name || obj[key], "path:", path.slice(-5));
+            console.log("🔗 Found option in shared context:", obj.name || obj[key], "type:", obj.type);
             return "option";
         }
 
@@ -57,21 +72,15 @@ function detectStringType(key: string, obj: any, path?: string[]): TranslationSt
             p === "entryLinks"
         ).length;
 
-        // If this is the first/root level selectionEntry, it's a unit
+        // If this is the first/root level selectionEntry, it could be a unit or option
         if (entryOccurrences === 1) {
-            console.log("🎯 Found unit (root level):", obj.name || obj[key], "parent:", parentContext, "path:", path.slice(-5));
-            return "unit";
+            console.log("⚙️ Found root level entry (not model/unit type):", obj.name || obj[key], "type:", obj.type, "parent:", parentContext);
+            return "option"; // Root level but not type model/unit = option
         } else {
             // Nested entries are options
-            console.log("⚙️ Found option (nested):", obj.name || obj[key], "nesting level:", entryOccurrences, "path:", path.slice(-5));
+            console.log("⚙️ Found option (nested):", obj.name || obj[key], "nesting level:", entryOccurrences);
             return "option";
         }
-    }
-
-    // Handle sharedSelectionEntries separately - treat them as options
-    if (parentContext === "sharedSelectionEntries" && key === "name") {
-        console.log("🔗 Found direct shared entry:", obj.name || obj[key]);
-        return "option";
     }
 
     // Check if it's in a profile context
