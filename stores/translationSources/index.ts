@@ -10,7 +10,6 @@ export interface TranslationSource {
 
   // Get translations for a specific language
   getTranslations(languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<{
-    strings: Record<string, Set<string>>;
     catalogues: TranslationCatalogue[];
     translations: TranslationString[];
   }>;

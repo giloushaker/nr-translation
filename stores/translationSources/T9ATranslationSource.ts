@@ -14,7 +14,6 @@ export class T9ATranslationSource implements TranslationSource {
   }
 
   async getTranslations(languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<{
-    strings: Record<string, Set<string>>;
     catalogues: TranslationCatalogue[];
     translations: TranslationString[];
   }> {

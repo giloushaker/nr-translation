@@ -14,7 +14,6 @@ export class NewRecruitTranslationSource implements TranslationSource {
   }
 
   async getTranslations(languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<{
-    strings: Record<string, Set<string>>;
     catalogues: TranslationCatalogue[];
     translations: TranslationString[];
   }> {
@@ -42,7 +41,6 @@ export class NewRecruitTranslationSource implements TranslationSource {
     progressCallback?.(50, "Processing interface strings...");
 
     const catalogueName = "interface";
-    const stringSet = new Set(newRecruitStrings);
     const strings: TranslationString[] = [];
     const allTranslations: TranslationString[] = [];
 
@@ -60,21 +58,16 @@ export class NewRecruitTranslationSource implements TranslationSource {
       allTranslations.push(translationString);
     });
 
-    const rawStrings: Record<string, Set<string>> = {
-      [catalogueName]: stringSet
-    };
-
     const catalogueList: TranslationCatalogue[] = [{
       id: catalogueName,
       name: "Interface Strings",
-      stringCount: stringSet.size,
+      stringCount: strings.length,
       strings: strings,
     }];
 
     progressCallback?.(100, "NewRecruit strings loaded");
 
     return {
-      strings: rawStrings,
       catalogues: catalogueList,
       translations: allTranslations
     };

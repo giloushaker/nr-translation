@@ -14,22 +14,18 @@ export class JSONTranslationSource implements TranslationSource {
   }
 
   async getTranslations(languageCode: string, progressCallback?: (progress: number, message?: string) => void): Promise<{
-    strings: Record<string, Set<string>>;
     catalogues: TranslationCatalogue[];
     translations: TranslationString[];
   }> {
-    const rawStrings: Record<string, Set<string>> = {};
     const catalogueList: TranslationCatalogue[] = [];
     const allTranslations: TranslationString[] = [];
 
     // Extract translatable strings from JSON structure
     if (this.jsonData.translatable_strings) {
       const catalogueName = "main";
-      const stringSet = new Set<string>();
       const strings: TranslationString[] = [];
 
       this.jsonData.translatable_strings.forEach((str: string, index: number) => {
-        stringSet.add(str);
         const translationString: TranslationString = {
           id: `${catalogueName}-${index}`,
           key: str,
@@ -43,17 +39,15 @@ export class JSONTranslationSource implements TranslationSource {
         allTranslations.push(translationString);
       });
 
-      rawStrings[catalogueName] = stringSet;
       catalogueList.push({
         id: catalogueName,
         name: catalogueName,
-        stringCount: stringSet.size,
+        stringCount: strings.length,
         strings: strings,
       });
     }
 
     return {
-      strings: rawStrings,
       catalogues: catalogueList,
       translations: allTranslations
     };

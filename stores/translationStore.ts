@@ -36,7 +36,6 @@ export type ExportFormat = "json" | "json-kv" | "csv" | "po";
 
 export const useTranslationStore = defineStore("translation", {
   state: () => ({
-    strings: {} as Record<string, Set<string>>,
     catalogues: [] as TranslationCatalogue[],
     translations: [] as TranslationString[],
     isLoaded: false,
@@ -246,27 +245,35 @@ export const useTranslationStore = defineStore("translation", {
 
         const mapStartTime = performance.now();
         // Build index map of translations by key OUTSIDE reactive context
-        const translationsByKey = new Map<string, number>();
+        // Use array of indices to handle duplicate keys across catalogues
+        const translationsByKey = new Map<string, number[]>();
         const translationsLength = this.translations.length;
         for (let i = 0; i < translationsLength; i++) {
-          translationsByKey.set(this.translations[i].key, i);
+          const key = this.translations[i].key;
+          if (!translationsByKey.has(key)) {
+            translationsByKey.set(key, []);
+          }
+          translationsByKey.get(key)!.push(i);
         }
         console.log(`📖 Built translation index: ${translationsLength} items (${Math.round(performance.now() - mapStartTime)}ms)`);
 
         const restoreStartTime = performance.now();
 
-        // Prepare updates array - only process the 17 saved translations
+        // Prepare updates array - process all occurrences of each saved translation
         const updates: Array<{ index: number; translation: string; modified: boolean }> = [];
         const savedLength = savedTranslations.length;
         for (let i = 0; i < savedLength; i++) {
           const saved = savedTranslations[i];
-          const idx = translationsByKey.get(saved.key);
-          if (idx !== undefined) {
-            updates.push({
-              index: idx,
-              translation: saved.translation || "",
-              modified: saved.modified || false,
-            });
+          const indices = translationsByKey.get(saved.key);
+          if (indices) {
+            // Update ALL occurrences of this key (handles duplicates across catalogues)
+            for (const idx of indices) {
+              updates.push({
+                index: idx,
+                translation: saved.translation || "",
+                modified: saved.modified || false,
+              });
+            }
           }
         }
 
@@ -336,20 +343,16 @@ export const useTranslationStore = defineStore("translation", {
         console.log("🔄 Getting translations from source...");
         // Get translations using the source
         const {
-          strings: rawStrings,
           catalogues: catalogueList,
           translations: allTranslations,
         } = await this.translationSource.getTranslations(languageCode || "en", progressCallback);
 
         console.log("🔄 Received translations:", {
-          stringsKeys: Object.keys(rawStrings).length,
           cataloguesCount: catalogueList.length,
           translationsCount: allTranslations.length
         });
 
         console.log("🔄 Storing translations in state...");
-        this.strings = rawStrings;
-        globalThis.strings = rawStrings;
         this.catalogues = catalogueList;
         this.translations = allTranslations;
         globalThis.translations = allTranslations;
@@ -439,7 +442,6 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     clearCache() {
-      this.strings = {};
       this.catalogues = [];
       this.translations = [];
       this.isLoaded = false;
@@ -449,7 +451,6 @@ export const useTranslationStore = defineStore("translation", {
       this.translatedCount = 0;
 
       // Clear global variables as well
-      globalThis.strings = {};
       globalThis.translations = [];
     },
 
