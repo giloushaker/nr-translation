@@ -66,6 +66,7 @@
                   <option value="BSData/wh40k-killteam">Kill Team (2024)</option>
                   <option value="BSData/horus-heresy-2nd-edition">Horus Heresy (2022)</option>
                   <option value="Fawkstrot11/TrenchCrusade">Trench Crusade</option>
+                  <option value="vflam/Warhammer-The-Old-World">The Old World</option>
                 </select>
               </div>
 
@@ -83,7 +84,11 @@
       </div>
     </div>
 
-    <div v-if="!loading && searchQuery.length >= 2 && users.length === 0" class="text-center text-muted" style="padding: 2rem">
+    <div
+      v-if="!loading && searchQuery.length >= 2 && users.length === 0"
+      class="text-center text-muted"
+      style="padding: 2rem"
+    >
       No users found matching "{{ searchQuery }}"
     </div>
   </div>

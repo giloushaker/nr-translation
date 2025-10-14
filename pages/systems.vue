@@ -4,9 +4,11 @@
       <h1>Game Systems</h1>
       <div class="page-actions">
         <span v-if="authStore.user" class="user-info text-muted">{{ authStore.user.login }}</span>
-
+        <button @click="refreshPermissions" class="btn" title="Refresh permissions from server">
+          Refresh Permissions
+        </button>
         <button @click="refreshDataSource" class="btn" title="Clear cached data and force re-download from GitHub">
-          🔄 Refresh Data
+          Refresh Data
         </button>
         <button @click="handleLogout" class="btn-secondary"> Logout </button>
       </div>
@@ -109,6 +111,12 @@ const allRepos = [
     description: "Trench Crusade game rules",
     url: "https://github.com/Fawkstrot11/TrenchCrusade",
     displayUrl: "Fawkstrot11/TrenchCrusade",
+  },
+  {
+    name: "The Old World",
+    description: "The Old World game rules",
+    url: "https://github.com/vflam/Warhammer-The-Old-World",
+    displayUrl: "vflam/Warhammer-The-Old-World",
   },
 ];
 

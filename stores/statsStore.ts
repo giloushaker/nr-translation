@@ -27,20 +27,26 @@ export const useStatsStore = defineStore("stats", {
   }),
 
   getters: {
-    getSystemStats: (state) => (systemId: string): SystemStats | null => {
-      return state.systemStats[systemId] || null;
-    },
+    getSystemStats:
+      (state) =>
+      (systemId: string): SystemStats | null => {
+        return state.systemStats[systemId] || null;
+      },
 
-    getLanguageStats: (state) => (systemId: string, languageCode: string): LanguageStats | null => {
-      const systemStats = state.systemStats[systemId];
-      return systemStats?.languages[languageCode] || null;
-    },
+    getLanguageStats:
+      (state) =>
+      (systemId: string, languageCode: string): LanguageStats | null => {
+        const systemStats = state.systemStats[systemId];
+        return systemStats?.languages[languageCode] || null;
+      },
 
-    isStatsExpired: (state) => (systemId: string, maxAge: number = 5 * 60 * 1000): boolean => {
-      const stats = state.systemStats[systemId];
-      if (!stats) return true;
-      return Date.now() - stats.lastUpdated > maxAge;
-    },
+    isStatsExpired:
+      (state) =>
+      (systemId: string, maxAge: number = 5 * 60 * 1000): boolean => {
+        const stats = state.systemStats[systemId];
+        if (!stats) return true;
+        return Date.now() - stats.lastUpdated > maxAge;
+      },
   },
 
   actions: {
@@ -55,7 +61,7 @@ export const useStatsStore = defineStore("stats", {
 
       try {
         const translationStore = useTranslationStore();
-        
+
         // Default language list
         const defaultLanguages = [
           { code: "en", name: "English" },
@@ -66,7 +72,7 @@ export const useStatsStore = defineStore("stats", {
           { code: "pt", name: "Portuguese" },
           { code: "ru", name: "Russian" },
           { code: "ja", name: "Japanese" },
-          { code: "zh", name: "Chinese" },
+          { code: "cn", name: "Chinese" },
         ];
 
         // Try to get backend stats first (for both total and per-language data)
@@ -82,7 +88,7 @@ export const useStatsStore = defineStore("stats", {
 
         // Get system total from source - simple and reliable
         let totalStrings = 0;
-        
+
         try {
           console.log("📊 Getting total strings from source for system:", systemId);
           const translationSources = await import("./translationSources");
@@ -90,12 +96,12 @@ export const useStatsStore = defineStore("stats", {
           const systemInfo = await source.getTranslations("en"); // Just to get structure
           totalStrings = systemInfo.translations.length;
           console.log("📊 Total strings from source:", totalStrings);
-          
+
           // Clear any loaded data to avoid contamination
           translationStore.clearCache();
         } catch (error) {
           console.warn("Failed to get total from source:", error);
-          
+
           // Fallback to backend stats if source fails
           if (backendStats?.totalStrings) {
             totalStrings = backendStats.totalStrings;
@@ -121,7 +127,7 @@ export const useStatsStore = defineStore("stats", {
             const localStats = await this.calculateLocalStats(systemId, lang.code, totalStrings);
             translated = localStats.translated;
             reviewed = localStats.reviewed;
-            
+
             // Only update total if we haven't gotten it yet and this language has data
             if (totalStrings === 0 && localStats.total > 0) {
               totalStrings = localStats.total;
@@ -135,8 +141,8 @@ export const useStatsStore = defineStore("stats", {
           languages[lang.code] = {
             code: lang.code,
             name: lang.name,
-            total: totalStrings,  // ✅ Same total for all languages
-            translated,           // ✅ Language-specific translated count
+            total: totalStrings, // ✅ Same total for all languages
+            translated, // ✅ Language-specific translated count
             reviewed,
             untranslated,
             translatedPercent,
@@ -153,13 +159,12 @@ export const useStatsStore = defineStore("stats", {
 
         // Cache the stats
         this.systemStats[systemId] = systemStats;
-        
-        return systemStats;
 
+        return systemStats;
       } catch (error) {
         console.error("Failed to load stats for system:", systemId, error);
         this.lastError = error instanceof Error ? error.message : "Unknown error";
-        
+
         // Return empty stats on error
         const emptyStats: SystemStats = {
           systemId,
@@ -167,33 +172,37 @@ export const useStatsStore = defineStore("stats", {
           languages: {},
           lastUpdated: Date.now(),
         };
-        
+
         return emptyStats;
       } finally {
         this.isLoading = false;
       }
     },
 
-    async calculateLocalStats(systemId: string, languageCode: string, systemTotal: number): Promise<{ total: number; translated: number; reviewed: number }> {
+    async calculateLocalStats(
+      systemId: string,
+      languageCode: string,
+      systemTotal: number
+    ): Promise<{ total: number; translated: number; reviewed: number }> {
       try {
         const translationStore = useTranslationStore();
-        
+
         // Get the correct source ID
         const translationSources = await import("./translationSources");
         const source = translationSources.createTranslationSourceForSystem(systemId);
         const sourceId = source.getId();
-        
+
         // Query IndexedDB for saved translations for this specific language
         const systemLanguageKey = `${sourceId}-${languageCode}`;
         const db = await translationStore.dbOpen();
-        const transaction = db.transaction(['translations'], 'readonly');
-        const store = transaction.objectStore('translations');
-        const index = store.index('systemLanguage');
-        
+        const transaction = db.transaction(["translations"], "readonly");
+        const store = transaction.objectStore("translations");
+        const index = store.index("systemLanguage");
+
         const savedTranslations = await new Promise<any[]>((resolve, reject) => {
           const results: any[] = [];
           const request = index.openCursor(IDBKeyRange.only(systemLanguageKey));
-          
+
           request.onsuccess = (event) => {
             const cursor = (event.target as IDBRequest).result;
             if (cursor) {
@@ -203,18 +212,19 @@ export const useStatsStore = defineStore("stats", {
               resolve(results);
             }
           };
-          
+
           request.onerror = () => reject(request.error);
         });
-        
-        console.log(`📊 IndexedDB stats for ${languageCode}: ${savedTranslations.length} translated out of ${systemTotal} total`);
-        
+
+        console.log(
+          `📊 IndexedDB stats for ${languageCode}: ${savedTranslations.length} translated out of ${systemTotal} total`
+        );
+
         return {
           total: systemTotal, // Use the system total that was passed in
           translated: savedTranslations.length,
           reviewed: 0, // We don't track reviewed status yet
         };
-        
       } catch (error) {
         console.warn("Failed to calculate local stats:", error);
         return { total: systemTotal, translated: 0, reviewed: 0 };
@@ -243,7 +253,7 @@ export const useStatsStore = defineStore("stats", {
         langStats.translated = translatedCount;
         langStats.untranslated = Math.max(0, langStats.total - translatedCount);
         langStats.translatedPercent = langStats.total > 0 ? Math.round((translatedCount / langStats.total) * 100) : 0;
-        
+
         // Update timestamp to keep cache fresh
         systemStats.lastUpdated = Date.now();
       }
