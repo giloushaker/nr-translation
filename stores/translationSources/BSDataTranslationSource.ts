@@ -38,10 +38,11 @@ export class BSDataTranslationSource implements TranslationSource {
     const catalogueList: TranslationCatalogue[] = [];
     const allTranslations: TranslationString[] = [];
 
-    Object.entries(rawStrings).forEach(([catalogueName, translatableSet]) => {
+    Object.entries(rawStrings).forEach(([catalogueName, translatableMap]) => {
       const strings: TranslationString[] = [];
 
-      Array.from(translatableSet).forEach((translatable, index) => {
+      // Map.values() returns an iterator of values
+      Array.from(translatableMap.values()).forEach((translatable, index) => {
         const translationString: TranslationString = {
           id: `${catalogueName}-${index}`,
           key: translatable.text,
@@ -59,15 +60,15 @@ export class BSDataTranslationSource implements TranslationSource {
       catalogueList.push({
         id: catalogueName,
         name: catalogueName,
-        stringCount: translatableSet.size,
+        stringCount: translatableMap.size,
         strings: strings,
       });
     });
 
-    // Convert ITranslatable Set to string Set for compatibility
+    // Convert ITranslatable Map to string Set for compatibility
     const stringSet: Record<string, Set<string>> = {};
-    Object.entries(rawStrings).forEach(([catalogueName, translatableSet]) => {
-      stringSet[catalogueName] = new Set(Array.from(translatableSet).map(t => t.text));
+    Object.entries(rawStrings).forEach(([catalogueName, translatableMap]) => {
+      stringSet[catalogueName] = new Set(Array.from(translatableMap.values()).map(t => t.text));
     });
 
     // Log the translation source JSON for debugging
