@@ -169,7 +169,6 @@ const processFiles = async (files: Array<{ path: string; content: string }>) => 
 
   // Store system globally and navigate to languages page
   globalThis.system = gameSystem;
-  console.log("loaded", gameSystem.gameSystem?.gameSystem?.name ?? "Unknown System");
   // Navigate to language selection with appropriate system identifier
   // For GitHub repos, use owner/repo format if available
   const githubMatch = githubUrl.value?.match(/github\.com\/([^\/]+)\/([^\/]+)/);

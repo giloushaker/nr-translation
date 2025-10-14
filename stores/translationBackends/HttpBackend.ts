@@ -33,11 +33,6 @@ export class HttpBackend implements TranslationBackend {
 
   async fetchTranslations(systemId: string, languageCode: string): Promise<TranslationString[]> {
     const url = `${this.baseUrl}/translations`;
-
-    console.log("🔄 Fetching translations from:", url);
-    console.log("🔄 System ID:", systemId);
-    console.log("🔄 Language Code:", languageCode);
-
     const headers = this.getAuthHeaders();
 
     const requestBody = {
@@ -46,38 +41,27 @@ export class HttpBackend implements TranslationBackend {
     };
 
     try {
-      const response = await fetch(url, { 
+      const response = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
       });
 
-      console.log("📡 Response status:", response.status);
-      console.log("📡 Response headers:", Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("❌ API Error Response:", errorText);
         throw new Error(`Sync failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
-      console.log("✅ Received data:", data);
       return data.translations || [];
     } catch (error) {
-      console.error("❌ Fetch error:", error);
+      console.error("Fetch error:", error);
       throw error;
     }
   }
 
   async uploadTranslations(systemId: string, languageCode: string, translations: TranslationString[]): Promise<void> {
     const url = `${this.baseUrl}/translations`;
-
-    console.log("📤 Uploading translations to:", url);
-    console.log("📤 System ID:", systemId);
-    console.log("📤 Language Code:", languageCode);
-    console.log("📤 Translations count:", translations.length);
-
     const headers = this.getAuthHeaders();
 
     const requestBody = {
@@ -93,17 +77,12 @@ export class HttpBackend implements TranslationBackend {
         body: JSON.stringify(requestBody),
       });
 
-      console.log("📡 Upload response status:", response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("❌ Upload error response:", errorText);
         throw new Error(`Submit failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
-
-      console.log("✅ Upload successful");
     } catch (error) {
-      console.error("❌ Upload error:", error);
+      console.error("Upload error:", error);
       throw error;
     }
   }
@@ -115,32 +94,23 @@ export class HttpBackend implements TranslationBackend {
   async getStats(systemId: string): Promise<any> {
     try {
       const url = `${this.baseUrl}/stats`;
-
-      console.log("📊 Fetching stats from:", url);
-      console.log("📊 System ID:", systemId);
-
       const headers = this.getAuthHeaders();
 
       const requestBody = {
         systemId,
       };
 
-      const response = await fetch(url, { 
+      const response = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
       });
 
-      console.log("📡 Stats response status:", response.status);
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.warn(`Stats request failed: ${response.status} ${response.statusText} - ${errorText}`);
         return null;
       }
 
       const data = await response.json();
-      console.log("✅ Stats data:", data);
       return data;
     } catch (error) {
       console.warn("Failed to fetch stats from HTTP backend:", error);

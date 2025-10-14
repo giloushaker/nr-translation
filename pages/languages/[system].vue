@@ -8,13 +8,7 @@
         :breadcrumbs="breadcrumbs"
         title="Select Language"
         :subtitle="systemName ? `System: ${systemName}` : undefined"
-      >
-        <template #actions>
-          <button @click="handleSync" class="btn-primary">
-            Sync Translations
-          </button>
-        </template>
-      </PageHeader>
+      />
 
       <div class="grid-2">
         <div v-for="lang in languages" :key="lang.code" class="card-interactive" @click="selectLanguage(lang.code)">
@@ -126,18 +120,15 @@ const loadSystem = async (systemId: string) => {
   await loadingStore.withLoading(async (updateProgress) => {
     try {
       updateProgress(20, "Loading system information...");
-      console.log("Loading system:", systemId);
 
       // Get just the system name without loading full translations
       const translationSources = await import("~/stores/translationSources");
       systemName.value = await translationSources.getSystemName(systemId);
-      console.log("System name loaded:", systemName.value);
 
       updateProgress(50, "Loading translation statistics...");
 
       // Load stats using the centralized statsStore
       const systemStats = await statsStore.loadStatsForSystem(systemId);
-      console.log("Stats loaded:", systemStats);
 
       updateProgress(80, "Preparing language data...");
 
@@ -169,10 +160,8 @@ const loadSystem = async (systemId: string) => {
 
 const initializeLanguagePage = async () => {
   const systemId = route.params.system as string;
-  console.log("Languages page init:", { systemId, path: route.path });
 
   if (!systemId) {
-    console.log("No systemId in languages page, redirecting to systems");
     router.push("/systems");
     return;
   }
@@ -205,10 +194,6 @@ const goHome = () => {
 const selectLanguage = (langCode: string) => {
   const systemId = route.params.system as string;
   router.push(`/translate/${encodeURIComponent(systemId)}/${langCode}`);
-};
-
-const handleSync = () => {
-  alert("Please select a language first to sync translations");
 };
 </script>
 

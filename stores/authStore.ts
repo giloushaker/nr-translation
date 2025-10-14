@@ -79,7 +79,6 @@ export const useAuthStore = defineStore("auth", {
           this.token = response.token;
           this.user = response.user;
           this.isAuthenticated = true;
-          console.log("✅ Login successful");
           return true;
         }
 
@@ -105,7 +104,6 @@ export const useAuthStore = defineStore("auth", {
           this.token = response.token;
           this.user = response.user;
           this.isAuthenticated = true;
-          console.log("✅ Registration successful");
           return true;
         }
 
@@ -132,7 +130,6 @@ export const useAuthStore = defineStore("auth", {
           this.token = response.token;
           this.user = response.user;
           this.isAuthenticated = true;
-          console.log("✅ Permissions refreshed");
           return true;
         }
 
@@ -147,7 +144,6 @@ export const useAuthStore = defineStore("auth", {
       this.token = null;
       this.user = null;
       this.isAuthenticated = false;
-      console.log("👋 Logged out");
     },
 
     // Restore auth state from localStorage on app init

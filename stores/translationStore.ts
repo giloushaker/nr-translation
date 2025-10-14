@@ -171,7 +171,6 @@ export const useTranslationStore = defineStore("translation", {
 
     async saveTranslationsToLocal(systemId: string, languageCode: string, translations?: TranslationString[]) {
       const systemLanguageKey = `${systemId}-${languageCode}`;
-      console.log("💾 Saving to IndexedDB:", { systemId, languageCode, translationsCount: translations?.length });
 
       try {
         if (translations && translations.length > 0) {
@@ -191,11 +190,9 @@ export const useTranslationStore = defineStore("translation", {
                 lastSaved: Date.now(),
               };
 
-              console.log("💾 Saving translation:", { key: translation.key, translation: translation.translation });
               await this.dbPutRecord(record);
             } else {
               // If not translated, remove the record if it exists
-              console.log("🗑️ Removing translation:", { key: translation.key });
               await this.dbDeleteByCompositeKey(`${systemId}-${languageCode}-${translation.key}`);
             }
           }
@@ -204,7 +201,6 @@ export const useTranslationStore = defineStore("translation", {
           await this.dbDeleteByIndex("systemLanguage", systemLanguageKey);
 
           const translatedStrings = this.translations.filter((t) => t.translated);
-          console.log("💾 Full save - translated strings:", translatedStrings.length);
           for (const translation of translatedStrings) {
             const record = {
               compositeKey: `${systemId}-${languageCode}-${translation.key}`,
@@ -221,29 +217,22 @@ export const useTranslationStore = defineStore("translation", {
             await this.dbPutRecord(record);
           }
         }
-        console.log("✅ Successfully saved to IndexedDB");
       } catch (error) {
-        console.error("❌ Failed to save translations to IndexedDB:", error);
+        console.error("Failed to save translations to IndexedDB:", error);
       }
     },
 
     async loadTranslationsFromLocal(systemId: string, languageCode: string): Promise<boolean> {
       const systemLanguageKey = `${systemId}-${languageCode}`;
-      console.log("📖 Loading from IndexedDB:", { systemId, languageCode, systemLanguageKey });
 
       try {
-        const startTime = performance.now();
-
         // Get all saved translations for this system-language
         const savedTranslations = await this.dbGetByIndex("systemLanguage", systemLanguageKey);
-        console.log(`📖 Found ${savedTranslations.length} saved translations (${Math.round(performance.now() - startTime)}ms)`);
 
         if (savedTranslations.length === 0) {
-          console.log("📖 No saved translations found");
           return false;
         }
 
-        const mapStartTime = performance.now();
         // Build index map of translations by key OUTSIDE reactive context
         // Use array of indices to handle duplicate keys across catalogues
         const translationsByKey = new Map<string, number[]>();
@@ -255,9 +244,6 @@ export const useTranslationStore = defineStore("translation", {
           }
           translationsByKey.get(key)!.push(i);
         }
-        console.log(`📖 Built translation index: ${translationsLength} items (${Math.round(performance.now() - mapStartTime)}ms)`);
-
-        const restoreStartTime = performance.now();
 
         // Prepare updates array - process all occurrences of each saved translation
         const updates: Array<{ index: number; translation: string; modified: boolean }> = [];
@@ -277,10 +263,6 @@ export const useTranslationStore = defineStore("translation", {
           }
         }
 
-        // Apply all updates by directly modifying the array without going through reactive proxy
-        const patchStartTime = performance.now();
-        console.log(`⏱️ Starting updates with ${updates.length} items...`);
-
         // Access the raw (non-reactive) array for faster modifications
         const rawTranslations = toRaw(this.translations);
 
@@ -298,15 +280,9 @@ export const useTranslationStore = defineStore("translation", {
         // Update count
         this.translatedCount = updateLength;
 
-        const patchEndTime = performance.now();
-        console.log(`⏱️ Updates completed in ${Math.round(patchEndTime - patchStartTime)}ms`);
-
-        console.log(`📖 Restored ${updates.length} translations (${Math.round(performance.now() - restoreStartTime)}ms)`);
-
-        console.log(`✅ Successfully loaded from IndexedDB (total: ${Math.round(performance.now() - startTime)}ms)`);
         return true;
       } catch (error) {
-        console.error("❌ Failed to load translations from IndexedDB:", error);
+        console.error("Failed to load translations from IndexedDB:", error);
         return false;
       }
     },
@@ -327,32 +303,22 @@ export const useTranslationStore = defineStore("translation", {
       progressCallback?: (progress: number, message?: string) => void
     ) {
       const sourceId = translationSource.getId();
-      console.log("🔄 loadTranslationsFromSource started:", { sourceId, languageCode });
 
       // Only load if not already loaded for this source
       if (this.isLoaded && this.currentSystemId === sourceId) {
-        console.log("🔄 Already loaded for this source, skipping");
         return;
       }
 
       try {
-        console.log("🔄 Setting translation source and ID");
         this.translationSource = translationSource;
         this.currentSystemId = sourceId;
 
-        console.log("🔄 Getting translations from source...");
         // Get translations using the source
         const {
           catalogues: catalogueList,
           translations: allTranslations,
         } = await this.translationSource.getTranslations(languageCode || "en", progressCallback);
 
-        console.log("🔄 Received translations:", {
-          cataloguesCount: catalogueList.length,
-          translationsCount: allTranslations.length
-        });
-
-        console.log("🔄 Storing translations in state...");
         this.catalogues = catalogueList;
         this.translations = allTranslations;
         globalThis.translations = allTranslations;
@@ -360,19 +326,15 @@ export const useTranslationStore = defineStore("translation", {
         this.translatedCount = allTranslations.filter((s) => s.translated).length;
         this.isLoaded = true;
 
-        console.log("🔄 Setting translation source again...");
         // Store the translation source
         this.translationSource = translationSource;
 
-        console.log("🔄 Loading from IndexedDB...");
         // Try to restore saved translations from IndexedDB
         if (languageCode) {
           await this.loadTranslationsFromLocal(sourceId, languageCode);
         }
-        
-        console.log("✅ loadTranslationsFromSource completed successfully");
       } catch (error) {
-        console.error("❌ Failed to load translations:", error);
+        console.error("Failed to load translations:", error);
         throw error;
       }
     },
@@ -387,23 +349,13 @@ export const useTranslationStore = defineStore("translation", {
       const source = createTranslationSourceForSystem(systemId);
       const sourceId = source.getId();
 
-      console.log("🚀 ensureTranslationsLoaded called:", {
-        systemId,
-        sourceId,
-        languageCode,
-        isLoaded: this.isLoaded,
-        currentSystemId: this.currentSystemId,
-      });
-
       // If translations are already loaded for this exact system, try to restore from IndexedDB and return
       if (this.isLoaded && this.currentSystemId === sourceId) {
-        console.log("🚀 System already loaded, restoring from IndexedDB");
         // Always try to load from IndexedDB to restore any saved translations
         await this.loadTranslationsFromLocal(sourceId, languageCode);
         return;
       }
 
-      console.log("🚀 Loading fresh data for system");
       // Always clear cache when loading a different system
       this.clearCache();
 
@@ -413,7 +365,6 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     updateTranslation(stringId: string, translation: string, systemId?: string, languageCode?: string) {
-      console.log("updating");
       const translationObj = this.translations.find((t) => t.id === stringId);
       if (translationObj) {
         translationObj.translation = translation;
@@ -527,11 +478,8 @@ export const useTranslationStore = defineStore("translation", {
         let resolvedConflicts = 0;
 
         if (backendTranslations.length === 0) {
-          console.log("📝 Server has no translations, but will still upload local ones");
-          console.log("🔍 Step 1: Skipping conflict detection - no server data");
           // Skip conflict detection entirely - no server data to conflict with
         } else {
-          console.log("🔄 Processing", backendTranslations.length, "server translations for conflicts");
           const translationMap = new Map(this.translations.map((t) => [t.key, t]));
           const safeUpdates: Array<{ local: TranslationString; server: TranslationString }> = [];
 
@@ -597,39 +545,24 @@ export const useTranslationStore = defineStore("translation", {
         }
 
         // Update catalogues to match (skip if might cause freeze)
-        console.log("🔍 Step 2: About to update catalogues...");
         // Note: This was causing freezes before with large datasets, so we're skipping it during sync
         // this.updateCataloguesFromTranslations();
-        console.log("✅ Step 2: Skipping catalogue update to prevent freeze");
 
         // Update counts (skip to prevent freeze)
-        console.log("🔍 Step 3: About to update translated count...");
-        console.log("🔍 Step 3: Total translations to filter:", this.translations.length);
         // Skip this filtering operation as it might freeze with large datasets
-        console.log("⚠️ Step 3: Skipping translated count update to prevent freeze");
         // this.translatedCount = this.translations.filter((s) => s.translated).length;
-        console.log("✅ Step 3: Skipped translated count update");
 
         // Save to local storage
-        console.log("🔍 Step 4: About to save to local storage...");
         await this.saveTranslationsToLocal(systemId, languageCode);
-        console.log("✅ Step 4: Saved to local storage");
 
         // Upload local translations back to server (bidirectional sync)
-        console.log("🔍 Step 5: About to upload local translations to server...");
         const serverTranslationKeys = new Set(backendTranslations.map(t => t.key));
         await this.uploadLocalTranslationsToServer(systemId, languageCode, serverTranslationKeys);
-        console.log("✅ Step 5: Finished uploading local translations to server");
 
-        console.log("🔍 Step 6: Finalizing sync...");
-        console.log("🔍 Backend still available?", this.backend?.isAvailable());
-        console.log("🔍 Backend URL:", this.backend ? "exists" : "missing");
-        
         // Get uploaded count from the upload method
         const uploaded = this.getLastUploadCount();
-        
+
         this.lastSyncTime = Date.now();
-        console.log("✅ Sync completed successfully");
         
         return { 
           conflicts: strategy === "ask-user" ? conflicts : [],
@@ -661,55 +594,33 @@ export const useTranslationStore = defineStore("translation", {
     // Upload local translations to server during sync (bidirectional sync)
     async uploadLocalTranslationsToServer(systemId: string, languageCode: string, serverTranslationKeys?: Set<string>): Promise<void> {
       if (!this.backend?.isAvailable()) {
-        console.warn("No backend available for uploading local translations");
         return;
       }
 
       try {
-        console.log("🔍 Debug: Total translations in store:", this.translations.length);
-        console.log("🔍 Debug: Sample translations:", this.translations.slice(0, 3).map(t => ({
-          id: t.id,
-          key: t.key,
-          translated: t.translated,
-          translation: t.translation?.substring(0, 50) + "...",
-          modified: t.modified
-        })));
-
         // Get all local translations that should be uploaded
         // Only upload translations that are:
         // 1. Modified locally (have local changes)
         // 2. Don't exist on server (are new local translations)
         const translatedStrings = this.translations.filter((t) => t.translated && t.translation && t.translation.trim() !== "");
-        
+
         const localTranslations = translatedStrings.filter((t) => {
           // Upload if it's a local modification
           if (t.modified) {
             return true;
           }
-          
+
           // Upload if it doesn't exist on server (new local translation)
           if (serverTranslationKeys && !serverTranslationKeys.has(t.key)) {
             return true;
           }
-          
+
           // Don't upload if it came from server and hasn't been modified
           return false;
         });
-        
-        console.log("🔍 Debug: Translated strings:", translatedStrings.length);
-        console.log("🔍 Debug: Local translations to upload:", localTranslations.length);
-        console.log("🔍 Debug: Server translation keys count:", serverTranslationKeys?.size || 0);
 
         if (localTranslations.length > 0) {
-          console.log(`🔄 Uploading ${localTranslations.length} local translations to server during sync...`);
-          console.log("🔍 Debug: Sample translations to upload:", localTranslations.slice(0, 2).map(t => ({
-            id: t.id,
-            key: t.key,
-            translation: t.translation?.substring(0, 50) + "...",
-          })));
-          
           await this.backend.uploadTranslations(systemId, languageCode, localTranslations);
-          console.log("✅ Local translations uploaded to server successfully");
 
           // Store uploaded count for sync summary
           this.lastUploadCount = localTranslations.length;
@@ -720,15 +631,12 @@ export const useTranslationStore = defineStore("translation", {
           });
 
           // Update catalogues to reflect the unmodified state (skip to prevent freeze)
-          console.log("⚠️ Skipping catalogue update in upload to prevent freeze");
           // this.updateCataloguesFromTranslations();
-          console.log("✅ Upload method completed successfully");
         } else {
-          console.log("📝 No local translations to upload during sync");
           this.lastUploadCount = 0;
         }
       } catch (error) {
-        console.error("❌ Failed to upload local translations to server:", error);
+        console.error("Failed to upload local translations to server:", error);
         this.lastUploadCount = 0;
         // Don't throw - sync should continue even if upload fails
       }
@@ -749,7 +657,6 @@ export const useTranslationStore = defineStore("translation", {
       });
 
       // Skip expensive operations to prevent freezing with large datasets
-      console.log("⚠️ Skipping catalogue update and count recalculation in resolveConflicts to prevent freeze");
       // this.updateCataloguesFromTranslations();
       // this.translatedCount = this.translations.filter((s) => s.translated).length;
     },

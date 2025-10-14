@@ -151,8 +151,6 @@ const loadUsers = async () => {
     const baseURL = config.public.apiUrl || "";
     const token = authStore.getToken;
 
-    console.log(`🔍 Searching users with query: "${searchQuery.value}"`);
-
     const response = await $fetch<{ success: boolean; users: User[]; message?: string }>(
       `${baseURL}/api/admin/users?search=${encodeURIComponent(searchQuery.value)}`,
       {
@@ -162,17 +160,13 @@ const loadUsers = async () => {
       }
     );
 
-    console.log("📦 Response received:", response);
-
     if (response.success) {
       users.value = response.users;
-      console.log("✅ Found", users.value.length, "users");
     } else {
       error.value = response.message || "API returned success=false";
     }
   } catch (err: any) {
-    console.error("❌ Failed to search users:", err);
-    console.error("❌ Error data:", err.data);
+    console.error("Failed to search users:", err);
     error.value = err.data?.statusMessage || err.message || "Failed to search users";
   } finally {
     loading.value = false;

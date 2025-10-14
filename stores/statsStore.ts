@@ -79,7 +79,6 @@ export const useStatsStore = defineStore("stats", {
         let backendStats: any = null;
         if (translationStore.backend?.isAvailable()) {
           try {
-            console.log("📊 Loading stats from backend for system:", systemId);
             backendStats = await translationStore.backend.getStats(systemId);
           } catch (error) {
             console.warn("Failed to load stats from backend:", error);
@@ -90,12 +89,10 @@ export const useStatsStore = defineStore("stats", {
         let totalStrings = 0;
 
         try {
-          console.log("📊 Getting total strings from source for system:", systemId);
           const translationSources = await import("./translationSources");
           const source = translationSources.createTranslationSourceForSystem(systemId);
           const systemInfo = await source.getTranslations("en"); // Just to get structure
           totalStrings = systemInfo.translations.length;
-          console.log("📊 Total strings from source:", totalStrings);
 
           // Clear any loaded data to avoid contamination
           translationStore.clearCache();
@@ -105,7 +102,6 @@ export const useStatsStore = defineStore("stats", {
           // Fallback to backend stats if source fails
           if (backendStats?.totalStrings) {
             totalStrings = backendStats.totalStrings;
-            console.log("📊 Using backend total as fallback:", totalStrings);
           }
         }
 
@@ -215,10 +211,6 @@ export const useStatsStore = defineStore("stats", {
 
           request.onerror = () => reject(request.error);
         });
-
-        console.log(
-          `📊 IndexedDB stats for ${languageCode}: ${savedTranslations.length} translated out of ${systemTotal} total`
-        );
 
         return {
           total: systemTotal, // Use the system total that was passed in

@@ -50,7 +50,6 @@ const initializeTranslationPage = async () => {
   // Only redirect if we're actually on a translate route but missing parameters
   const isTranslateRoute = route.path.includes("/translate/");
   if (isTranslateRoute && (!systemId || !languageCode)) {
-    console.log("Redirecting to systems due to missing params on translate route");
     await router.push("/systems");
     return;
   }
@@ -113,10 +112,6 @@ watch(
     const isOnTranslateRoute = route.path.includes("/translate/");
 
     if (paramsChanged && isOnTranslateRoute && oldSystem !== undefined) {
-      console.log("System/Language changed:", {
-        from: [oldSystem, oldLang],
-        to: [newSystem, newLang],
-      });
       isTranslationDataReady.value = false;
       await initializeTranslationPage();
     }

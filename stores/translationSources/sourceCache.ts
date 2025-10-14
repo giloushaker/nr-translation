@@ -71,10 +71,7 @@ export async function setCachedSource(
 
     return new Promise((resolve, reject) => {
       const request = store.put(record);
-      request.onsuccess = () => {
-        console.log(`✅ Cached source ${owner}/${repo}@${releaseTag}`);
-        resolve();
-      };
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
@@ -91,10 +88,7 @@ export async function clearCachedSource(owner: string, repo: string): Promise<vo
 
     return new Promise((resolve, reject) => {
       const request = store.delete(key);
-      request.onsuccess = () => {
-        console.log(`🗑️ Cleared cache for ${owner}/${repo}`);
-        resolve();
-      };
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
@@ -110,10 +104,7 @@ export async function clearAllCache(): Promise<void> {
 
     return new Promise((resolve, reject) => {
       const request = store.clear();
-      request.onsuccess = () => {
-        console.log("🗑️ Cleared all source cache");
-        resolve();
-      };
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   } catch (error) {

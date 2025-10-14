@@ -349,10 +349,6 @@ const handleSyncSubmit = async (data: {
     showSyncDialog.value = false;
     syncConflicts.value = [];
     selectedFile.value = null;
-
-    // Show success message
-    const message = data.selectedFile ? "Translations imported successfully" : "Translations synced successfully";
-    console.log(message);
   } catch (error: any) {
     console.error("Failed to sync translations:", error);
     alert("Failed to sync translations: " + error.message);
@@ -362,11 +358,7 @@ const handleSyncSubmit = async (data: {
 const handleSubmit = async (data: { onlyModified: boolean }) => {
   try {
     await translationStore.submitToBackend(route.params.system as string, languageCode.value, data.onlyModified);
-
     showSubmitDialog.value = false;
-
-    // Show success message (you might want to add a toast/notification system)
-    console.log("Translations submitted successfully");
   } catch (error: any) {
     console.error("Failed to submit translations:", error);
     // Show error message to user

@@ -78,8 +78,6 @@ export class BSDataTranslationSource implements TranslationSource {
       translations: allTranslations,
     };
 
-    console.log("Translation source:", result);
-
     return result;
   }
 
