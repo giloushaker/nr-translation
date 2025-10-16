@@ -104,6 +104,7 @@ export function extractStrings(system: GameSystemFiles, progressCallback: (progr
     "comment",
     "info",
     "typeName",
+    "kind",
 
     "authorName",
     "authorContact",
