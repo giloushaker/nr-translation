@@ -10,7 +10,8 @@ export type TranslationStringType =
   | "ruleName" // Name of a rule
   | "rule" // Rule content
   | "category" // Category name
-  | "faction" // Faction name
+  | "faction" // Faction name (catalogue name)
+  | "force" // Force entry
   | "other"; // Other strings
 
 export interface ITranslatable {
@@ -20,78 +21,6 @@ export interface ITranslatable {
   };
   text: string;
   type?: TranslationStringType;
-}
-
-function detectStringType(key: string, obj: any, path?: string[]): TranslationStringType {
-  if (!path || path.length === 0) return "other";
-
-  // Get the immediate parent context (last item in path before current)
-  const parentContext = path[path.length - 1];
-
-  // Check if we're directly in a categoryEntry (not just somewhere in the path)
-  if (parentContext === "categoryEntries" && key === "name") {
-    return "category";
-  }
-
-  // Check if it's in a force/faction context
-  if (parentContext === "forceEntries" && key === "name") {
-    return "faction";
-  }
-
-  // Check if we're in a selection entry context (including sharedSelectionEntries)
-  if (
-    (parentContext === "selectionEntries" ||
-      parentContext === "entryLinks" ||
-      parentContext === "sharedSelectionEntries") &&
-    key === "name"
-  ) {
-    // Check if this entry has type "model" or "unit" - these are root units
-    if (obj.type === "model" || obj.type === "unit") {
-      return "unit";
-    }
-
-    // For entryLinks, check the target's type if available
-    if (parentContext === "entryLinks" && obj.target) {
-      const targetType = obj.target.type;
-      if (targetType === "model" || targetType === "unit") {
-        return "unit";
-      }
-    }
-
-    // If not a unit type, count nesting level for selectionEntries
-    const inSharedContext = path.some((p) => p === "sharedSelectionEntries");
-    if (inSharedContext) {
-      return "option";
-    }
-
-    // Count how many times we see selectionEntries/entryLinks in the path
-    // Units are at the root level (first occurrence), options are nested deeper
-    const entryOccurrences = path.filter((p) => p === "selectionEntries" || p === "entryLinks").length;
-
-    // If this is the first/root level selectionEntry, it could be a unit or option
-    if (entryOccurrences === 1) {
-      return "option"; // Root level but not type model/unit = option
-    } else {
-      // Nested entries are options
-      return "option";
-    }
-  }
-
-  // Check if it's in a profile context
-  if (parentContext === "profiles" || path.some((p) => p === "profiles")) {
-    if (key === "name") return "profileName";
-    if (key === "typeName") return "profileName";
-    return "profile";
-  }
-
-  // Check if it's in a rule context
-  if (parentContext === "rules" || path.some((p) => p === "rules")) {
-    if (key === "name") return "ruleName";
-    if (key === "description") return "rule";
-    return "rule";
-  }
-
-  return "other";
 }
 
 export function extractStrings(system: GameSystemFiles, progressCallback: (progress: number, message: string) => void) {
@@ -124,18 +53,100 @@ export function extractStrings(system: GameSystemFiles, progressCallback: (progr
   const typePriority: Record<TranslationStringType, number> = {
     unit: 9,
     faction: 8,
-    category: 7,
-    profileName: 6,
-    ruleName: 5,
-    profile: 4,
-    rule: 3,
-    option: 2,
-    other: 1,
+    force: 7,
+    category: 6,
+    profileName: 5,
+    ruleName: 4,
+    profile: 3,
+    rule: 2,
+    option: 1,
+    other: 0,
   };
 
   // Use Map instead of Set to deduplicate by text value
   const result = {} as Record<string, Map<string, ITranslatable>>;
   const files = system.getAllCatalogueFiles();
+
+  // Collect all catalogue names to detect factions
+  const catalogueNames = new Set<string>();
+  for (const file of files) {
+    const data = getDataObject(file);
+    catalogueNames.add(data.name);
+  }
+
+  // Move detectStringType inside extractStrings to access catalogueNames
+  const detectStringType = (key: string, obj: any, path: string[] | undefined, value: string): TranslationStringType => {
+    // Check if the text matches a catalogue name (faction detection) FIRST
+    // This is the ONLY criterion for faction type and should work regardless of path
+    if (catalogueNames.has(value)) {
+      return "faction";
+    }
+
+    if (!path || path.length === 0) return "other";
+
+    // Get the immediate parent context (last item in path before current)
+    const parentContext = path[path.length - 1];
+
+    // Check if we're directly in a categoryEntry (not just somewhere in the path)
+    if (parentContext === "categoryEntries" && key === "name") {
+      return "category";
+    }
+
+    // Check if we're in a selection entry context (including sharedSelectionEntries)
+    if (
+      (parentContext === "selectionEntries" ||
+        parentContext === "entryLinks" ||
+        parentContext === "sharedSelectionEntries") &&
+      key === "name"
+    ) {
+      // Check if this entry has type "model" or "unit" - these are root units
+      if (obj.type === "model" || obj.type === "unit") {
+        return "unit";
+      }
+
+      // For entryLinks, check the target's type if available
+      if (parentContext === "entryLinks" && obj.target) {
+        const targetType = obj.target.type;
+        if (targetType === "model" || targetType === "unit") {
+          return "unit";
+        }
+      }
+
+      // If not a unit type, count nesting level for selectionEntries
+      const inSharedContext = path.some((p) => p === "sharedSelectionEntries");
+      if (inSharedContext) {
+        return "option";
+      }
+
+      // Count how many times we see selectionEntries/entryLinks in the path
+      // Units are at the root level (first occurrence), options are nested deeper
+      const entryOccurrences = path.filter((p) => p === "selectionEntries" || p === "entryLinks").length;
+
+      // If this is the first/root level selectionEntry, it could be a unit or option
+      if (entryOccurrences === 1) {
+        return "option"; // Root level but not type model/unit = option
+      } else {
+        // Nested entries are options
+        return "option";
+      }
+    }
+
+    // Check if it's in a profile context
+    if (parentContext === "profiles" || path.some((p) => p === "profiles")) {
+      if (key === "name") return "profileName";
+      if (key === "typeName") return "profileName";
+      return "profile";
+    }
+
+    // Check if it's in a rule context
+    if (parentContext === "rules" || path.some((p) => p === "rules")) {
+      if (key === "name") return "ruleName";
+      if (key === "description") return "rule";
+      return "rule";
+    }
+
+    return "other";
+  };
   let cur = 0;
   for (const file of files) {
     const data = getDataObject(file);
@@ -153,7 +164,7 @@ export function extractStrings(system: GameSystemFiles, progressCallback: (progr
         if (key === "name" && path?.at(-1) === "characteristics") return;
         if (!(data.name in result)) result[data.name] = new Map();
 
-        const type = detectStringType(key, obj, path);
+        const type = detectStringType(key, obj, path, value);
 
         // Use text as key to deduplicate - same text = same translation
         // If text already exists, keep the type with higher priority

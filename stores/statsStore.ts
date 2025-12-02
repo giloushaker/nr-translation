@@ -68,11 +68,16 @@ export const useStatsStore = defineStore("stats", {
           { code: "es", name: "Spanish" },
           { code: "fr", name: "French" },
           { code: "de", name: "German" },
+          { code: "pl", name: "Polish" },
           { code: "it", name: "Italian" },
           { code: "pt", name: "Portuguese" },
           { code: "ru", name: "Russian" },
           { code: "ja", name: "Japanese" },
           { code: "cn", name: "Chinese" },
+          { code: "hr", name: "Croatian" },
+          { code: "cz", name: "Czech" },
+          { code: "sk", name: "Slovak" },
+          { code: "gr", name: "Greek" },
         ];
 
         // Try to get backend stats first (for both total and per-language data)

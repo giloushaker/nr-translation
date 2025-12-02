@@ -6,13 +6,7 @@
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="login">Username</label>
-          <input
-            id="login"
-            v-model="loginForm.login"
-            type="text"
-            required
-            placeholder="Enter your username"
-          />
+          <input id="login" v-model="loginForm.login" type="text" required placeholder="Enter your username" />
         </div>
 
         <div class="form-group">
@@ -29,12 +23,7 @@
 
         <div v-if="isRegistering" class="form-group">
           <label for="systems">Game Systems (optional)</label>
-          <input
-            id="systems"
-            v-model="systemsInput"
-            type="text"
-            placeholder="e.g., BSData/wh40k, BSData/aos"
-          />
+          <input id="systems" v-model="systemsInput" type="text" placeholder="e.g., BSData/wh40k, BSData/aos" />
           <small>Comma-separated list of systems you can translate</small>
         </div>
 
@@ -43,7 +32,7 @@
         </div>
 
         <button type="submit" class="btn-primary" :disabled="isLoading">
-          {{ isLoading ? "Please wait..." : (isRegistering ? "Register" : "Login") }}
+          {{ isLoading ? "Please wait..." : isRegistering ? "Register" : "Login" }}
         </button>
       </form>
 
@@ -59,6 +48,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import HelpUs from "~/components/HelpUs.vue";
 import { useAuthStore } from "~/stores/authStore";
 
 const router = useRouter();

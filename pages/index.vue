@@ -1,5 +1,6 @@
 <template>
   <div class="login-container">
+    <HelpUs />
     <div class="login-card card">
       <h1>Login</h1>
 
@@ -91,6 +92,7 @@ onMounted(() => {
   align-items: center;
   min-height: 100vh;
   padding: 2rem;
+  flex-direction: column;
 }
 
 .login-card {

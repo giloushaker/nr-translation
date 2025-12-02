@@ -1,12 +1,31 @@
 <template>
   <div class="container">
+    <!-- Sync Dialog -->
+    <SyncDialog
+      :show="showSyncDialog"
+      :sync-conflicts="syncConflicts"
+      :selected-file="selectedFile"
+      :is-syncing="isSyncing"
+      :can-sync="hasBackend"
+      :sync-summary="syncSummary"
+      @close="closeSyncDialog"
+      @file-select="handleFileSelect"
+      @sync="handleSyncSubmit"
+      @resolve-conflicts="handleConflictResolution"
+    />
+
     <PageHeader
       :breadcrumbs="breadcrumbs"
       :title="currentCatalogue?.name || 'Loading...'"
       :stats="`${catalogueTranslatedCount}/${catalogueStrings.length} translated (${catalogueProgress}%)`"
     >
       <template #actions>
-        <button @click="handleSync" class="btn-primary" :disabled="isSyncing">
+        <button
+          @click="showSyncDialog = true"
+          class="btn-primary"
+          :disabled="isSyncing"
+          :title="hasBackend ? 'Sync translations from backend' : 'Import translations from file'"
+        >
           {{ isSyncing ? "Syncing..." : "Sync Translations" }}
         </button>
       </template>
@@ -94,29 +113,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTranslationStore } from "~/stores/translationStore";
+import { useStatsStore } from "~/stores/statsStore";
 import PageHeader from "~/components/PageHeader.vue";
+import SyncDialog from "~/components/SyncDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
 const translationStore = useTranslationStore();
+const statsStore = useStatsStore();
 
-// Filter state
-const selectedFilter = ref<string>("all");
-const selectedType = ref<string>("unit");
-
-// Local editing state - store only values being edited
-const editingValues = ref<Map<string, string>>(new Map());
+// Dialog states
+const showSyncDialog = ref(false);
+const syncConflicts = ref<Array<{ key: string; original: string; local: string; server: string }>>([]);
+const selectedFile = ref<File | null>(null);
+const syncSummary = ref<{ received: number; uploaded: number; conflicts: number } | null>(null);
+const serverTranslationsFromSync = ref<Set<string>>(new Set());
 
 // Get route params
 const catalogueId = computed(() => route.params.catalogue as string);
 const languageCode = computed(() => route.params.lang as string);
 const systemId = computed(() => route.params.system as string);
 
-// State
-const isSyncing = ref(false);
+// Filter state
+const selectedFilter = ref<string>("all");
+const selectedType = ref<string>("all");
+
+// Local editing state - store only values being edited
+const editingValues = ref<Map<string, string>>(new Map());
+
+// Computed properties
+const isSyncing = computed(() => translationStore.isSyncing);
+const hasBackend = computed(() => translationStore.backend?.isAvailable() || false);
 
 // Language mapping
 const languageName = computed(() => {
@@ -185,6 +215,7 @@ const formatTypeName = (type: string): string => {
     rule: "Rule",
     category: "Category",
     faction: "Faction",
+    force: "Force",
     other: "Other",
   };
   return typeMap[type] || type;
@@ -194,6 +225,7 @@ const formatTypeName = (type: string): string => {
 const typeOrder = [
   "unit",
   "faction",
+  "force",
   "category",
   "profileName",
   "ruleName",
@@ -226,6 +258,49 @@ const availableTypes = computed(() => {
 const typeCount = (type: string) => {
   return catalogueStrings.value.filter((s) => (s.type || "other") === type).length;
 };
+
+// LocalStorage key for type filter
+const getTypeFilterKey = () => {
+  return `typeFilter:${systemId.value}:${languageCode.value}:${catalogueId.value}`;
+};
+
+// Initialize type filter from localStorage
+const initializeTypeFilter = () => {
+  if (typeof window === 'undefined') return;
+
+  const storageKey = getTypeFilterKey();
+  const savedType = localStorage.getItem(storageKey);
+
+  // If we have a saved value and it exists in available types, use it
+  if (savedType && (savedType === "all" || availableTypes.value.includes(savedType))) {
+    selectedType.value = savedType;
+  }
+  // Otherwise, default to "unit" if available
+  else if (availableTypes.value.includes("unit")) {
+    selectedType.value = "unit";
+  }
+  // Otherwise default to "all"
+  else {
+    selectedType.value = "all";
+  }
+};
+
+// Save type filter to localStorage when it changes
+watch(selectedType, (newType) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(getTypeFilterKey(), newType);
+});
+
+// Watch for catalogue changes and reinitialize type filter
+watch([catalogueStrings, availableTypes], () => {
+  if (catalogueStrings.value.length > 0) {
+    initializeTypeFilter();
+  }
+}, { immediate: true });
+
+onMounted(() => {
+  initializeTypeFilter();
+});
 
 // Filter strings
 const filteredStrings = computed(() => {
@@ -290,17 +365,122 @@ const toggleTranslationStatus = (string: any) => {
   }
 };
 
-// Sync translations from backend
-const handleSync = async () => {
-  isSyncing.value = true;
+// Sync Dialog handlers
+const closeSyncDialog = () => {
+  showSyncDialog.value = false;
+  syncConflicts.value = [];
+  selectedFile.value = null;
+  syncSummary.value = null;
+  serverTranslationsFromSync.value = new Set();
+};
+
+const handleFileSelect = (file: File | null) => {
+  selectedFile.value = file;
+};
+
+const handleSyncSubmit = async (data: { syncStrategy: "server-wins" | "client-wins" | "ask-user"; selectedFile?: File }) => {
   try {
-    await translationStore.syncFromBackend(systemId.value, languageCode.value);
-    alert("✅ Translations synced successfully!");
+    let result: {
+      conflicts: Array<{ key: string; original: string; local: string; server: string }>;
+      received?: number;
+      uploaded?: number;
+      resolvedConflicts?: number;
+      serverTranslations?: Array<{ key: string; [key: string]: any }>;
+    };
+
+    if (data.selectedFile) {
+      // Use file-based sync
+      result = await translationStore.syncFromFile(
+        data.selectedFile,
+        systemId.value,
+        languageCode.value,
+        data.syncStrategy
+      );
+    } else {
+      // Use backend sync
+      result = await translationStore.syncFromBackend(
+        systemId.value,
+        languageCode.value,
+        data.syncStrategy
+      );
+    }
+
+    if (result.conflicts.length > 0 && data.syncStrategy === "ask-user") {
+      syncConflicts.value = result.conflicts;
+      // Store server translations for proper upload logic during conflict resolution
+      if (result.serverTranslations) {
+        serverTranslationsFromSync.value = new Set(result.serverTranslations.map((t: { key: string }) => t.key));
+      }
+      // Keep dialog open to show conflicts
+      return;
+    }
+
+    // Clear conflicts and file selection
+    syncConflicts.value = [];
+    selectedFile.value = null;
+
+    // Update stats cache with new translation counts
+    statsStore.updateTranslationCount(
+      systemId.value,
+      languageCode.value,
+      translationStore.translatedCount
+    );
+
+    // Show summary instead of closing dialog
+    syncSummary.value = {
+      received: result.received || 0,
+      uploaded: result.uploaded || 0,
+      conflicts: result.resolvedConflicts || 0,
+    };
+
+    // Don't close dialog - show summary instead
   } catch (error: any) {
-    console.error("Sync failed:", error);
-    alert(`❌ Failed to sync: ${error.message || "Unknown error"}`);
-  } finally {
-    isSyncing.value = false;
+    console.error("Failed to sync translations:", error);
+    alert("Failed to sync translations: " + error.message);
+  }
+};
+
+const handleConflictResolution = async (
+  resolutions: Array<{ key: string; choice: "local" | "server"; server: string }>
+) => {
+  try {
+    // Apply the conflict resolutions
+    translationStore.resolveConflicts(resolutions);
+
+    // Complete the sync process by saving and uploading
+    await translationStore.saveTranslationsToLocal(systemId.value, languageCode.value);
+
+    // Upload any remaining local changes
+    await translationStore.uploadLocalTranslationsToServer(
+      systemId.value,
+      languageCode.value,
+      serverTranslationsFromSync.value
+    );
+
+    // Update stats cache with new translation counts
+    statsStore.updateTranslationCount(
+      systemId.value,
+      languageCode.value,
+      translationStore.translatedCount
+    );
+
+    // Clear conflicts and show summary
+    const resolvedCount = resolutions.length;
+    const uploadedCount = translationStore.getLastUploadCount();
+
+    syncConflicts.value = [];
+    selectedFile.value = null;
+    serverTranslationsFromSync.value = new Set();
+
+    // Show completion summary
+    syncSummary.value = {
+      received: resolvedCount,
+      uploaded: uploadedCount,
+      conflicts: resolvedCount,
+    };
+  } catch (error: any) {
+    console.error("Failed to resolve conflicts:", error);
+    alert("Failed to resolve conflicts: " + error.message);
   }
 };
 </script>
@@ -517,6 +697,11 @@ const handleSync = async () => {
 .type-faction {
   background: #f3e5f5;
   color: #6a1b9a;
+}
+
+.type-force {
+  background: #e1f5fe;
+  color: #0277bd;
 }
 
 .type-other {

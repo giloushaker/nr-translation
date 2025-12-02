@@ -184,7 +184,7 @@ import { ref, defineProps, defineEmits, watch, computed } from 'vue'
 
 interface Props {
   show: boolean
-  syncConflicts: Array<{ key: string; original: string; local: string; server: string }>
+  syncConflicts: Array<{ key: string; original: string; local: string; server: string; username?: string }>
   selectedFile: File | null
   isSyncing: boolean
   canSync: boolean
@@ -194,11 +194,11 @@ interface Props {
 interface Emits {
   (e: 'close'): void
   (e: 'file-select', file: File): void
-  (e: 'sync', data: { 
+  (e: 'sync', data: {
     syncStrategy: 'server-wins' | 'client-wins' | 'ask-user'
     selectedFile: File | null
   }): void
-  (e: 'resolve-conflicts', resolutions: Array<{ key: string; choice: 'local' | 'server'; server: string }>): void
+  (e: 'resolve-conflicts', resolutions: Array<{ key: string; choice: 'local' | 'server'; server: string; username?: string }>): void
 }
 
 const props = defineProps<Props>()
@@ -255,14 +255,15 @@ const completeResolution = () => {
   if (!allConflictsResolved.value) {
     return
   }
-  
+
   // All conflicts resolved, emit the resolutions
   const resolutions = props.syncConflicts.map(conflict => ({
     key: conflict.key,
     choice: conflictResolutions.value[conflict.key],
-    server: conflict.server
+    server: conflict.server,
+    username: conflict.username
   }))
-  
+
   emit('resolve-conflicts', resolutions)
 }
 

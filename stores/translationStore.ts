@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { toRaw } from "vue";
 import { TranslationBackend, FileBackend } from "./translationBackends";
 import { type TranslationSource } from "./translationSources";
+import { useAuthStore } from "./authStore";
 
 export type TranslationStringType =
   | "unit"        // Unit entry (isUnit() === true)
@@ -11,7 +12,8 @@ export type TranslationStringType =
   | "ruleName"    // Name of a rule
   | "rule"        // Rule content
   | "category"    // Category name
-  | "faction"     // Faction name
+  | "faction"     // Faction name (catalogue name)
+  | "force"       // Force entry
   | "other";      // Other strings
 
 export interface TranslationString {
@@ -23,6 +25,7 @@ export interface TranslationString {
   catalogue: string;
   type?: TranslationStringType;
   modified?: boolean;
+  username?: string; // User who last modified this translation
 }
 
 export interface TranslationCatalogue {
@@ -187,6 +190,7 @@ export const useTranslationStore = defineStore("translation", {
                 translation: translation.translation,
                 catalogue: translation.catalogue,
                 modified: translation.modified,
+                username: translation.username,
                 lastSaved: Date.now(),
               };
 
@@ -211,6 +215,7 @@ export const useTranslationStore = defineStore("translation", {
               translation: translation.translation,
               catalogue: translation.catalogue,
               modified: translation.modified,
+              username: translation.username,
               lastSaved: Date.now(),
             };
 
@@ -246,7 +251,7 @@ export const useTranslationStore = defineStore("translation", {
         }
 
         // Prepare updates array - process all occurrences of each saved translation
-        const updates: Array<{ index: number; translation: string; modified: boolean }> = [];
+        const updates: Array<{ index: number; translation: string; modified: boolean; username?: string }> = [];
         const savedLength = savedTranslations.length;
         for (let i = 0; i < savedLength; i++) {
           const saved = savedTranslations[i];
@@ -258,6 +263,7 @@ export const useTranslationStore = defineStore("translation", {
                 index: idx,
                 translation: saved.translation || "",
                 modified: saved.modified || false,
+                username: saved.username,
               });
             }
           }
@@ -274,6 +280,7 @@ export const useTranslationStore = defineStore("translation", {
             trans.translation = update.translation;
             trans.translated = true;
             trans.modified = update.modified;
+            trans.username = update.username;
           }
         }
 
@@ -371,6 +378,12 @@ export const useTranslationStore = defineStore("translation", {
         translationObj.modified = true;
         translationObj.translated = translation.trim() !== "";
 
+        // Capture username from authStore
+        const authStore = useAuthStore();
+        if (authStore.user?.login) {
+          translationObj.username = authStore.user.login;
+        }
+
         // Update translated count
         this.translatedCount = this.translations.filter((s) => s.translated).length;
 
@@ -382,6 +395,7 @@ export const useTranslationStore = defineStore("translation", {
             catString.translation = translation;
             catString.modified = true;
             catString.translated = translationObj.translated;
+            catString.username = translationObj.username;
           }
         }
 
@@ -425,7 +439,7 @@ export const useTranslationStore = defineStore("translation", {
       systemId: string,
       languageCode: string,
       strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
-    ): Promise<{ conflicts: Array<{ key: string; original: string; local: string; server: string }> }> {
+    ): Promise<{ conflicts: Array<{ key: string; original: string; local: string; server: string; username?: string }> }> {
       const fileBackend = new FileBackend(file);
       const backendTranslations = await fileBackend.fetchTranslations(systemId, languageCode);
 
@@ -437,10 +451,10 @@ export const useTranslationStore = defineStore("translation", {
       systemId: string,
       languageCode: string,
       strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
-    ): Promise<{ 
-      conflicts: Array<{ key: string; original: string; local: string; server: string }>;
+    ): Promise<{
+      conflicts: Array<{ key: string; original: string; local: string; server: string; username?: string }>;
       received: number;
-      uploaded: number; 
+      uploaded: number;
       resolvedConflicts: number;
       serverTranslations?: TranslationString[];
     }> {
@@ -459,8 +473,8 @@ export const useTranslationStore = defineStore("translation", {
       systemId: string,
       languageCode: string,
       strategy: "server-wins" | "client-wins" | "ask-user" = "ask-user"
-    ): Promise<{ 
-      conflicts: Array<{ key: string; original: string; local: string; server: string }>;
+    ): Promise<{
+      conflicts: Array<{ key: string; original: string; local: string; server: string; username?: string }>;
       received: number;
       uploaded: number;
       resolvedConflicts: number;
@@ -501,6 +515,7 @@ export const useTranslationStore = defineStore("translation", {
                 original: local.original,
                 local: local.translation,
                 server: serverTranslation.translation,
+                username: serverTranslation.username,
               });
             } else if (local.translation !== serverTranslation.translation) {
               // Only update if values are actually different
@@ -514,6 +529,7 @@ export const useTranslationStore = defineStore("translation", {
             local.translation = server.translation;
             local.translated = server.translated;
             local.modified = false;
+            local.username = server.username;
           });
 
           // Handle conflicts based on strategy
@@ -521,10 +537,12 @@ export const useTranslationStore = defineStore("translation", {
             if (strategy === "server-wins") {
               conflicts.forEach((conflict) => {
                 const local = translationMap.get(conflict.key);
+                const serverTranslation = backendTranslations.find(t => t.key === conflict.key);
                 if (local) {
                   local.translation = conflict.server;
                   local.translated = true;
                   local.modified = false;
+                  local.username = serverTranslation?.username;
                   resolvedConflicts++;
                 }
               });
@@ -533,10 +551,10 @@ export const useTranslationStore = defineStore("translation", {
               resolvedConflicts = conflicts.length;
             } else if (strategy === "ask-user") {
               // Return conflicts for user to resolve, including server translations for proper upload logic
-              return { 
-                conflicts, 
-                received, 
-                uploaded: 0, 
+              return {
+                conflicts,
+                received,
+                uploaded: 0,
                 resolvedConflicts: 0,
                 serverTranslations: backendTranslations
               };
@@ -643,7 +661,7 @@ export const useTranslationStore = defineStore("translation", {
     },
 
     // Resolve conflicts with user choices
-    resolveConflicts(conflicts: Array<{ key: string; choice: "local" | "server"; server: string }>) {
+    resolveConflicts(conflicts: Array<{ key: string; choice: "local" | "server"; server: string; username?: string }>) {
       const translationMap = new Map(this.translations.map((t) => [t.key, t]));
 
       conflicts.forEach((conflict) => {
@@ -652,6 +670,7 @@ export const useTranslationStore = defineStore("translation", {
           local.translation = conflict.server;
           local.translated = true;
           local.modified = false;
+          local.username = conflict.username;
         }
         // If choice is 'local', keep current local translation
       });
@@ -828,6 +847,161 @@ export const useTranslationStore = defineStore("translation", {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+    },
+
+    // Import translations from JSON file
+    async importFromJSON(
+      file: File,
+      systemId: string,
+      languageCode: string,
+      progressCallback?: (progress: number, message: string, stats: { matched: number; imported: number; skipped: number; notFound: number }) => void,
+      cancelSignal?: { cancelled: boolean }
+    ): Promise<{ matched: number; imported: number; skipped: number; notFound: number; cancelled?: boolean }> {
+      // Read file content
+      const fileContent = await file.text();
+      const importData: Record<string, string> = JSON.parse(fileContent);
+
+      const totalEntries = Object.entries(importData).length;
+      if (progressCallback) {
+        progressCallback(0, "Preparing import...", { matched: 0, imported: 0, skipped: 0, notFound: 0 });
+      }
+
+      // Build case-insensitive map of existing translations (use raw for performance)
+      const rawTranslations = toRaw(this.translations);
+      const translationMap = new Map<string, TranslationString>();
+      for (let i = 0; i < rawTranslations.length; i++) {
+        const t = rawTranslations[i];
+        translationMap.set(t.key.toLowerCase(), t);
+      }
+
+      // Build index of catalogue strings for fast lookup (avoid repeated find())
+      const catalogueStringMap = new Map<string, TranslationString>();
+      const rawCatalogues = toRaw(this.catalogues);
+      for (let i = 0; i < rawCatalogues.length; i++) {
+        const catalogue = rawCatalogues[i];
+        for (let j = 0; j < catalogue.strings.length; j++) {
+          const s = catalogue.strings[j];
+          catalogueStringMap.set(s.key, s);
+        }
+      }
+
+      // Get current username
+      const authStore = useAuthStore();
+      const username = authStore.user?.login;
+
+      let matched = 0;
+      let imported = 0;
+      let skipped = 0;
+      let notFound = 0;
+      let processedCount = 0;
+
+      // Collect translations to save (only ones we actually modified)
+      const translationsToSave: TranslationString[] = [];
+
+      // Save batch size - save to IndexedDB every N translations
+      const BATCH_SIZE = 100;
+      const PROGRESS_UPDATE_INTERVAL = 50; // Update UI every 50 items
+
+      // Process each entry in the import file
+      for (const [key, translation] of Object.entries(importData)) {
+        // Check for cancellation
+        if (cancelSignal?.cancelled) {
+          // Save what we have so far before cancelling
+          if (translationsToSave.length > 0) {
+            await this.saveTranslationsToLocal(systemId, languageCode, translationsToSave);
+            this.translatedCount += imported;
+          }
+
+          return { matched, imported, skipped, notFound, cancelled: true };
+        }
+
+        processedCount++;
+
+        const normalizedKey = key.toLowerCase();
+        const existingTranslation = translationMap.get(normalizedKey);
+
+        if (!existingTranslation) {
+          // Key not found in source data
+          notFound++;
+
+          // Update progress
+          if (progressCallback && processedCount % PROGRESS_UPDATE_INTERVAL === 0) {
+            const progress = (processedCount / totalEntries) * 100;
+            progressCallback(progress, `Processing: ${processedCount}/${totalEntries}`, { matched, imported, skipped, notFound });
+          }
+          continue;
+        }
+
+        matched++;
+
+        // Skip if already translated (don't overwrite existing translations)
+        if (existingTranslation.translated && existingTranslation.translation.trim() !== "") {
+          skipped++;
+
+          // Update progress
+          if (progressCallback && processedCount % PROGRESS_UPDATE_INTERVAL === 0) {
+            const progress = (processedCount / totalEntries) * 100;
+            progressCallback(progress, `Processing: ${processedCount}/${totalEntries}`, { matched, imported, skipped, notFound });
+          }
+          continue;
+        }
+
+        // Import the translation
+        existingTranslation.translation = translation;
+        existingTranslation.translated = translation.trim() !== "";
+        existingTranslation.modified = true;
+        if (username) {
+          existingTranslation.username = username;
+        }
+
+        // Also update in catalogue strings (using index for fast lookup)
+        const catString = catalogueStringMap.get(existingTranslation.key);
+        if (catString) {
+          catString.translation = translation;
+          catString.translated = existingTranslation.translated;
+          catString.modified = true;
+          catString.username = username;
+        }
+
+        translationsToSave.push(existingTranslation);
+        imported++;
+
+        // Update progress
+        if (progressCallback && processedCount % PROGRESS_UPDATE_INTERVAL === 0) {
+          const progress = (processedCount / totalEntries) * 100;
+          progressCallback(progress, `Processing: ${processedCount}/${totalEntries}`, { matched, imported, skipped, notFound });
+        }
+
+        // Save batch to IndexedDB periodically to avoid blocking
+        if (translationsToSave.length >= BATCH_SIZE) {
+          if (progressCallback) {
+            const progress = (processedCount / totalEntries) * 100;
+            progressCallback(progress, "Saving batch to database...", { matched, imported, skipped, notFound });
+          }
+
+          await this.saveTranslationsToLocal(systemId, languageCode, translationsToSave);
+          this.translatedCount += translationsToSave.length;
+          translationsToSave.length = 0; // Clear the batch
+        }
+      }
+
+      // Save remaining translations to IndexedDB
+      if (translationsToSave.length > 0) {
+        if (progressCallback) {
+          progressCallback(100, "Finalizing import...", { matched, imported, skipped, notFound });
+        }
+        await this.saveTranslationsToLocal(systemId, languageCode, translationsToSave);
+        this.translatedCount += translationsToSave.length;
+      } else {
+        // Update count if nothing left to save
+        this.translatedCount += imported;
+      }
+
+      if (progressCallback) {
+        progressCallback(100, "Import complete!", { matched, imported, skipped, notFound });
+      }
+
+      return { matched, imported, skipped, notFound, cancelled: false };
     },
   },
 });

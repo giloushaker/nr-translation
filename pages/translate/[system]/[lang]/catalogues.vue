@@ -17,6 +17,19 @@
       @resolve-conflicts="handleConflictResolution"
     />
 
+    <!-- Import Dialog -->
+    <ImportDialog
+      :show="showImportDialog"
+      :is-importing="isImporting"
+      :import-summary="importSummary"
+      :import-progress="importProgress"
+      :progress-message="progressMessage"
+      :live-stats="liveStats"
+      @close="closeImportDialog"
+      @import="handleImport"
+      @cancel="handleImportCancel"
+    />
+
     <PageHeader
       :breadcrumbs="breadcrumbs"
       title="Catalogues"
@@ -31,6 +44,14 @@
           :title="hasBackend ? 'Sync translations from backend' : 'Import translations from file'"
         >
           {{ isSyncing ? "Syncing..." : "Sync Translations" }}
+        </button>
+        <button
+          @click="showImportDialog = true"
+          class="btn-secondary"
+          :disabled="isImporting"
+          title="Import translations from JSON file"
+        >
+          {{ isImporting ? "Importing..." : "Import from JSON" }}
         </button>
         <button @click="showExportDialog = true" class="btn-success" title="Export translations to file">
           Export Translations
@@ -90,6 +111,7 @@ import { useTranslationStore, type ExportFormat } from "~/stores/translationStor
 import { useStatsStore } from "~/stores/statsStore";
 import SyncDialog from "~/components/SyncDialog.vue";
 import ExportDialog from "~/components/ExportDialog.vue";
+import ImportDialog from "~/components/ImportDialog.vue";
 import PageHeader from "~/components/PageHeader.vue";
 
 const route = useRoute();
@@ -100,10 +122,17 @@ const statsStore = useStatsStore();
 // Dialog states
 const showExportDialog = ref(false);
 const showSyncDialog = ref(false);
+const showImportDialog = ref(false);
 const syncConflicts = ref<Array<{ key: string; original: string; local: string; server: string }>>([]);
 const selectedFile = ref<File | null>(null);
 const syncSummary = ref<{ received: number; uploaded: number; conflicts: number } | null>(null);
 const serverTranslationsFromSync = ref<Set<string>>(new Set());
+const isImporting = ref(false);
+const importSummary = ref<{ matched: number; imported: number; skipped: number; notFound: number; cancelled?: boolean } | null>(null);
+const importProgress = ref(0);
+const progressMessage = ref('Preparing...');
+const liveStats = ref({ matched: 0, imported: 0, skipped: 0, notFound: 0 });
+const cancelSignal = ref({ cancelled: false });
 
 // Computed properties from store
 const catalogues = computed(() => translationStore.catalogues);
@@ -334,6 +363,59 @@ const handleExport = (data: { format: ExportFormat; onlyTranslated: boolean; onl
   );
 
   showExportDialog.value = false;
+};
+
+// Import functionality
+const closeImportDialog = () => {
+  showImportDialog.value = false;
+  importSummary.value = null;
+  importProgress.value = 0;
+  progressMessage.value = 'Preparing...';
+  liveStats.value = { matched: 0, imported: 0, skipped: 0, notFound: 0 };
+  cancelSignal.value = { cancelled: false };
+};
+
+const handleImport = async (file: File) => {
+  isImporting.value = true;
+  importProgress.value = 0;
+  progressMessage.value = 'Preparing...';
+  liveStats.value = { matched: 0, imported: 0, skipped: 0, notFound: 0 };
+  cancelSignal.value = { cancelled: false };
+
+  try {
+    const result = await translationStore.importFromJSON(
+      file,
+      route.params.system as string,
+      languageCode.value,
+      // Progress callback
+      (progress: number, message: string, stats: { matched: number; imported: number; skipped: number; notFound: number }) => {
+        importProgress.value = progress;
+        progressMessage.value = message;
+        liveStats.value = stats;
+      },
+      // Cancel signal
+      cancelSignal.value
+    );
+
+    importSummary.value = result;
+
+    // Update stats cache with new translation counts
+    statsStore.updateTranslationCount(
+      route.params.system as string,
+      languageCode.value,
+      translationStore.translatedCount
+    );
+  } catch (error: any) {
+    console.error("Failed to import translations:", error);
+    alert(`Failed to import translations: ${error.message}`);
+    showImportDialog.value = false;
+  } finally {
+    isImporting.value = false;
+  }
+};
+
+const handleImportCancel = () => {
+  cancelSignal.value.cancelled = true;
 };
 </script>
 

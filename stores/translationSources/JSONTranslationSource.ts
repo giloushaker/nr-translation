@@ -25,6 +25,19 @@ export class JSONTranslationSource implements TranslationSource {
       const catalogueName = "main";
       const strings: TranslationString[] = [];
 
+      // Add the catalogue name itself as a translatable string
+      const catalogueNameString: TranslationString = {
+        id: `${catalogueName}-catalogue-name`,
+        key: catalogueName,
+        original: catalogueName,
+        translation: "",
+        translated: false,
+        catalogue: catalogueName,
+        type: "faction",
+      };
+      strings.push(catalogueNameString);
+      allTranslations.push(catalogueNameString);
+
       this.jsonData.translatable_strings.forEach((str: string, index: number) => {
         const translationString: TranslationString = {
           id: `${catalogueName}-${index}`,

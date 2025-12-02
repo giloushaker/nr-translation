@@ -12,10 +12,10 @@ target="/home/vflam/nr-translate"
 ssh -f -N -M -S /tmp/ssh_socket -o ControlPersist=600 $server
 
 # Stop the server
-ssh $server "echo NRnge23? | sudo -S service nrtranslate stop"
+ssh $server "echo NRnge234? | sudo -S service nrtranslate stop"
 
 # Copy files
 rsync -pogtrzvL $appdir/.output $server:$target
 
 # Start the server
-ssh $server "echo NRnge23? | sudo -S service nrtranslate start"
+ssh $server "echo NRnge234? | sudo -S service nrtranslate start"

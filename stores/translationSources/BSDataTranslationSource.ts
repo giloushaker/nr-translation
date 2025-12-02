@@ -40,6 +40,19 @@ export class BSDataTranslationSource implements TranslationSource {
     Object.entries(rawStrings).forEach(([catalogueName, translatableMap]) => {
       const strings: TranslationString[] = [];
 
+      // Add the catalogue name itself as a translatable string
+      const catalogueNameString: TranslationString = {
+        id: `${catalogueName}-catalogue-name`,
+        key: catalogueName,
+        original: catalogueName,
+        translation: "",
+        translated: false,
+        catalogue: catalogueName,
+        type: "faction",
+      };
+      strings.push(catalogueNameString);
+      allTranslations.push(catalogueNameString);
+
       // Map.values() returns an iterator of values
       Array.from(translatableMap.values()).forEach((translatable, index) => {
         const translationString: TranslationString = {
@@ -59,7 +72,7 @@ export class BSDataTranslationSource implements TranslationSource {
       catalogueList.push({
         id: catalogueName,
         name: catalogueName,
-        stringCount: translatableMap.size,
+        stringCount: translatableMap.size + 1, // +1 for the catalogue name itself
         strings: strings,
       });
     });
