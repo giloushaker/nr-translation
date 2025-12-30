@@ -101,10 +101,10 @@ const allRepos = [
     displayUrl: "BSData/wh40k-killteam",
   },
   {
-    name: "Horus Heresy (2022)",
+    name: "Horus Heresy 3",
     description: "Horus Heresy (2022) game rules",
-    url: "https://github.com/BSData/horus-heresy-2nd-edition",
-    displayUrl: "BSData/horus-heresy-2nd-edition",
+    url: "https://github.com/BSData/horus-heresy-3rd-edition",
+    displayUrl: "BSData/horus-heresy-3rd-edition",
   },
   {
     name: "Trench Crusade",
@@ -117,6 +117,17 @@ const allRepos = [
     description: "The Old World game rules",
     url: "https://github.com/vflam/Warhammer-The-Old-World",
     displayUrl: "vflam/Warhammer-The-Old-World",
+  },
+  {
+    name: "Mordheim",
+    description: "Mordheim game rules",
+    url: "https://github.com/BSData/mordheim",
+    displayUrl: "BSData/mordheim",
+  },
+  {
+    name: "Marcher: Empires At War",
+    url: "https://github.com/GoldenDragonGames/MarcherEAW",
+    displayUrl: "GoldenDragonGames/MarcherEAW",
   },
 ];
 

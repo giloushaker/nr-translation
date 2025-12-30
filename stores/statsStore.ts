@@ -74,6 +74,7 @@ export const useStatsStore = defineStore("stats", {
           { code: "ru", name: "Russian" },
           { code: "ja", name: "Japanese" },
           { code: "cn", name: "Chinese" },
+          { code: "kr", name: "Korean" },
           { code: "hr", name: "Croatian" },
           { code: "cz", name: "Czech" },
           { code: "sk", name: "Slovak" },

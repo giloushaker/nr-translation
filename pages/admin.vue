@@ -64,9 +64,11 @@
                   <option value="BSData/wh40k-9e">Warhammer 40k 9th Edition</option>
                   <option value="BSData/age-of-sigmar-4th">Age of Sigmar 4.0</option>
                   <option value="BSData/wh40k-killteam">Kill Team (2024)</option>
-                  <option value="BSData/horus-heresy-2nd-edition">Horus Heresy (2022)</option>
+                  <option value="BSData/horus-heresy-3rd-edition">Horus Heresy 3</option>
                   <option value="Fawkstrot11/TrenchCrusade">Trench Crusade</option>
                   <option value="vflam/Warhammer-The-Old-World">The Old World</option>
+                  <option value="BSData/mordheim">Mordheim</option>
+                  <option value="GoldenDragonGames/MarcherEAW">Marcher: Empires At War</option>
                 </select>
               </div>
 

@@ -51,6 +51,16 @@
             </option>
           </select>
         </div>
+        <div class="filter-group search-group">
+          <label for="search-input">Search:</label>
+          <input
+            id="search-input"
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            placeholder="Search in keys or text..."
+          />
+        </div>
         <div class="filter-stats">
           <span class="filter-count">{{ filteredStrings.length }} of {{ catalogueStrings.length }} strings shown</span>
         </div>
@@ -140,6 +150,7 @@ const systemId = computed(() => route.params.system as string);
 // Filter state
 const selectedFilter = ref<string>("all");
 const selectedType = ref<string>("all");
+const searchQuery = ref<string>("");
 
 // Local editing state - store only values being edited
 const editingValues = ref<Map<string, string>>(new Map());
@@ -325,7 +336,19 @@ const filteredStrings = computed(() => {
     const passesTypeFilter =
       selectedType.value === "all" || (string.type || "other") === selectedType.value;
 
-    return passesStatusFilter && passesTypeFilter;
+    // Filter by search query
+    let passesSearchFilter = true;
+    if (searchQuery.value.trim()) {
+      const query = searchQuery.value.toLowerCase();
+      const searchableText = [
+        string.key || "",
+        string.original || "",
+        string.translation || ""
+      ].join(" ").toLowerCase();
+      passesSearchFilter = searchableText.includes(query);
+    }
+
+    return passesStatusFilter && passesTypeFilter && passesSearchFilter;
   });
 });
 
@@ -538,6 +561,27 @@ const handleConflictResolution = async (
   color: #495057;
   cursor: pointer;
   min-width: 160px;
+}
+
+.search-input {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.875rem;
+  color: #495057;
+  min-width: 200px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+}
+
+.search-group {
+  flex-grow: 1;
 }
 
 .filter-stats {
